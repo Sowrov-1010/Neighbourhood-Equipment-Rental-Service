@@ -1,0 +1,6 @@
+{
+  "name": "Neighborhood Tool & Equipment Rental Directory",
+  "description": "Peer-to-peer neighborhood sharing directory for non-consumable tools and household appliances with flexible pricing, track-record screening, and dispute resolution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
