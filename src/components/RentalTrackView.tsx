@@ -568,7 +568,7 @@ export const RentalTrackView: React.FC<RentalTrackViewProps> = ({
                 type="text"
                 value={earlyReason}
                 onChange={(e) => setEarlyReason(e.target.value)}
-                placeholder="e.g. Urgent personal maintenance need, scheduling conflict..."
+                placeholder="Enter reason for early return"
                 className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
               />
             </div>

@@ -12,7 +12,14 @@ import {
   CloudSyncInfo,
   ProductReview,
   PointOfInterest,
-  BorrowerQualityCheck
+  BorrowerQualityCheck,
+  PaymentReceivingMethod,
+  ResidentStanding,
+  PlatformRole,
+  CredentialRecoveryRequest,
+  ResidentSupportCategory,
+  ResidentSupportRequest,
+  ResidentSupportMessage
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -35,6 +42,7 @@ import {
   getDocs 
 } from '../firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { normalizeNeighborhoodName } from '../data/neighborhoods';
 
 // Utility: Clean undefined fields for Firestore compatibility
 function sanitizeForFirestore<T>(data: T): any {
@@ -52,6 +60,87 @@ function sanitizeForFirestore<T>(data: T): any {
     return cleaned;
   }
   return data;
+}
+
+function normalizeLegacyPersonaNames<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value
+      .replace(/Marcus Vance/gi, 'Rahim Uddin')
+      .replace(/Sarah Jenkins/gi, 'Nusrat Jahan')
+      .replace(/John Doe/gi, 'Tanvir Ahmed')
+      .replace(/marcus\.vance@neighborhood\.org|rahim@example\.com/gi, 'rahim.uddin@neighborhood.org')
+      .replace(/sarah\.j@neighborhood\.org|sarah@example\.com|nusrat@example\.com/gi, 'nusrat.jahan@neighborhood.org')
+      .replace(/john\.doe@neighborhood\.org/gi, 'tanvir.ahmed@neighborhood.org') as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => normalizeLegacyPersonaNames(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeLegacyPersonaNames(item)])
+    ) as T;
+  }
+  return value;
+}
+
+const MAIN_ADMIN_EMAIL = 'jahid_hassan1010@uits.edu.bd';
+const ASSISTANT_ADMIN_EMAIL = 'admin@district.org';
+
+function normalizeUserRole(user: UserProfile): UserProfile {
+  const normalizedUser = normalizeLegacyPersonaNames(user);
+  const email = normalizedUser.email.trim().toLowerCase();
+  const personaEmailByName: Record<string, string> = {
+    'rahim uddin': 'rahim.uddin@neighborhood.org',
+    'nusrat jahan': 'nusrat.jahan@neighborhood.org',
+    'tanvir ahmed': 'tanvir.ahmed@neighborhood.org',
+  };
+  const normalizedEmail = personaEmailByName[normalizedUser.name.trim().toLowerCase()] || email;
+  let role: PlatformRole = normalizedUser.role;
+  if (email === MAIN_ADMIN_EMAIL) {
+    role = 'admin';
+  } else if (email === ASSISTANT_ADMIN_EMAIL) {
+    role = 'assistant';
+  } else if (normalizedUser.roleVersion !== 2 || !['admin', 'resident', 'moderator'].includes(role)) {
+    role = 'resident';
+  }
+  const legacyRequest = normalizedUser.credentialRecoveryRequest;
+  const supportRequests = normalizedUser.supportRequests || (legacyRequest ? [{
+    id: `recovery-${normalizedUser.id}`,
+    category: legacyRequest.password ? 'Forgot password' as const : 'Forgot security PIN' as const,
+    message: legacyRequest.password && legacyRequest.securityPin
+      ? 'Resident requested password and security PIN recovery.'
+      : legacyRequest.password
+        ? 'Resident requested password recovery.'
+        : 'Resident requested security PIN recovery.',
+    status: 'open' as const,
+    requestedAt: legacyRequest.requestedAt,
+  }] : []);
+  return {
+    ...normalizedUser,
+    email: normalizedEmail,
+    role,
+    roleVersion: 2,
+    supportRequests,
+  };
+}
+
+async function normalizeCloudDocuments<T>(
+  collectionName: string,
+  documents: Array<{ id: string; data: () => unknown }>,
+  normalize: (document: T) => T = normalizeLegacyPersonaNames
+): Promise<T[]> {
+  return Promise.all(documents.map(async document => {
+    const original = document.data() as T;
+    const normalized = normalize(original);
+    if (JSON.stringify(original) !== JSON.stringify(normalized)) {
+      try {
+        await setDoc(doc(db, collectionName, document.id), sanitizeForFirestore(normalized), { merge: true });
+      } catch (err) {
+        console.warn(`Firestore persona-name update failed for [${collectionName}/${document.id}]:`, err);
+      }
+    }
+    return normalized;
+  }));
 }
 
 interface AppContextType {
@@ -75,8 +164,9 @@ interface AppContextType {
     password: string;
     phone: string;
     neighborhood: string;
-    role?: 'user';
+    role?: 'resident';
     securityPin?: string;
+    paymentMethods?: PaymentReceivingMethod[];
     mobileBankingProvider?: string;
     mobileBankingHandle?: string;
     bankName?: string;
@@ -88,9 +178,18 @@ interface AppContextType {
     password: string;
     securityCode: string;
   }) => { success: boolean; error?: string };
+  requestCredentialRecovery: (identifier: string, category: ResidentSupportCategory, message: string) => { success: boolean; error?: string };
+  resetResidentCredentials: (userId: string, credentials: { password?: string; securityPin?: string; supportRequestId?: string; message?: string }) => { success: boolean; error?: string };
+  resolveResidentSupportRequest: (userId: string, requestId: string, resolution: string) => { success: boolean; error?: string };
+  getResidentSupportByEmail: (email: string) => { residentName: string; requests: ResidentSupportRequest[] } | null;
+  sendResidentSupportMessage: (email: string, requestId: string, message: string) => { success: boolean; error?: string };
+  sendAdminSupportMessage: (userId: string, requestId: string, message: string) => { success: boolean; error?: string };
   logout: () => void;
   setCurrentUserById: (userId: string) => void;
   updateUserProfile: (data: Partial<UserProfile>) => void;
+  updateUserStanding: (userId: string, standing: ResidentStanding) => void;
+  updateUserRole: (userId: string, role: Exclude<PlatformRole, 'assistant'>) => { success: boolean; error?: string };
+  adminRemoveResident: (userId: string) => { success: boolean; error?: string };
   settleAdminFine: () => void;
 
   // Admin Process Controls
@@ -222,7 +321,8 @@ const CONSUMABLE_TERMS = [
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<UserProfile[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_users_v2');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    const users: UserProfile[] = normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : INITIAL_USERS);
+    return users.map(user => normalizeUserRole({ ...user, neighborhood: normalizeNeighborhoodName(user.neighborhood) }));
   });
 
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
@@ -237,32 +337,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_assets');
-    return saved ? JSON.parse(saved) : INITIAL_ASSETS;
+    const assets: Asset[] = saved ? JSON.parse(saved) : INITIAL_ASSETS;
+    return normalizeLegacyPersonaNames(assets).map(asset => ({ ...asset, neighborhood: normalizeNeighborhoodName(asset.neighborhood) }));
   });
 
   const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_requests');
-    return saved ? JSON.parse(saved) : INITIAL_REQUESTS;
+    return normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : INITIAL_REQUESTS);
   });
 
   const [disputes, setDisputes] = useState<DisputeTicket[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_disputes');
-    return saved ? JSON.parse(saved) : INITIAL_DISPUTES;
+    return normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : INITIAL_DISPUTES);
   });
 
   const [broadcasts, setBroadcasts] = useState<BroadcastRequirement[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_broadcasts');
-    return saved ? JSON.parse(saved) : INITIAL_BROADCASTS;
+    return normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : INITIAL_BROADCASTS);
   });
 
   const [reviews, setReviews] = useState<UserReview[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_reviews');
-    return saved ? JSON.parse(saved) : [];
+    return normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : []);
   });
 
   const [productReviews, setProductReviews] = useState<ProductReview[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_product_reviews');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCT_REVIEWS;
+    return normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : INITIAL_PRODUCT_REVIEWS);
   });
 
   const [adminSecurityCode, setAdminSecurityCode] = useState<string>(() => {
@@ -274,7 +375,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_notifications');
-    return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    return normalizeLegacyPersonaNames(saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS);
   });
 
   // Cloud Database Sync State
@@ -451,7 +552,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await setDoc(doc(db, 'assets', item.id), sanitizeForFirestore(item));
             }
           } else if (!snapshot.empty) {
-            const loaded = snapshot.docs.map(d => d.data() as Asset);
+            const loaded = (await normalizeCloudDocuments<Asset>('assets', snapshot.docs)).map(asset => {
+              return { ...asset, neighborhood: normalizeNeighborhoodName(asset.neighborhood) };
+            });
             setAssets(loaded);
           }
         }, (err) => console.warn('Firestore assets onSnapshot notice:', err.message));
@@ -463,8 +566,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await setDoc(doc(db, 'users', user.id), sanitizeForFirestore(user));
             }
           } else {
-            const loaded = snapshot.docs.map(d => d.data() as UserProfile);
-            setUsers(loaded);
+            const loaded = await normalizeCloudDocuments<UserProfile>('users', snapshot.docs, normalizeUserRole);
+            const normalizedUsers = loaded.map(user => {
+              return { ...user, neighborhood: normalizeNeighborhoodName(user.neighborhood) };
+            });
+            setUsers(normalizedUsers);
           }
         }, (err) => console.warn('Firestore users onSnapshot notice:', err.message));
 
@@ -475,7 +581,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await setDoc(doc(db, 'rental_requests', req.id), sanitizeForFirestore(req));
             }
           } else {
-            const loaded = snapshot.docs.map(d => d.data() as RentalRequest);
+            const loaded = await normalizeCloudDocuments<RentalRequest>('rental_requests', snapshot.docs);
             setRentalRequests(loaded);
           }
         }, (err) => console.warn('Firestore requests onSnapshot notice:', err.message));
@@ -487,7 +593,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await setDoc(doc(db, 'disputes', d.id), sanitizeForFirestore(d));
             }
           } else {
-            const loaded = snapshot.docs.map(d => d.data() as DisputeTicket);
+            const loaded = await normalizeCloudDocuments<DisputeTicket>('disputes', snapshot.docs);
             setDisputes(loaded);
           }
         }, (err) => console.warn('Firestore disputes onSnapshot notice:', err.message));
@@ -499,15 +605,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await setDoc(doc(db, 'broadcasts', b.id), sanitizeForFirestore(b));
             }
           } else {
-            const loaded = snapshot.docs.map(d => d.data() as BroadcastRequirement);
+            const loaded = await normalizeCloudDocuments<BroadcastRequirement>('broadcasts', snapshot.docs);
             setBroadcasts(loaded);
           }
         }, (err) => console.warn('Firestore broadcasts onSnapshot notice:', err.message));
 
         // 6. Reviews Listener
-        unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
+        unsubReviews = onSnapshot(collection(db, 'reviews'), async (snapshot) => {
           if (!snapshot.empty) {
-            const loaded = snapshot.docs.map(d => d.data() as UserReview);
+            const loaded = await normalizeCloudDocuments<UserReview>('reviews', snapshot.docs);
             setReviews(loaded);
           }
         }, (err) => console.warn('Firestore reviews onSnapshot notice:', err.message));
@@ -519,7 +625,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               await setDoc(doc(db, 'notifications', n.id), sanitizeForFirestore(n));
             }
           } else {
-            const loaded = snapshot.docs.map(d => d.data() as AppNotification);
+            const loaded = await normalizeCloudDocuments<AppNotification>('notifications', snapshot.docs);
             setNotifications(loaded);
           }
         }, (err) => console.warn('Firestore notifications onSnapshot notice:', err.message));
@@ -596,7 +702,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (password && user.password && user.password !== password) {
-      return { success: false, error: 'Incorrect password. (Try "password123" for demo accounts).' };
+      return { success: false, error: 'Incorrect password.' };
     }
 
     setCurrentUserId(user.id);
@@ -612,7 +718,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const adminUser = users.find(u => u.email.toLowerCase() === cleanEmail && u.role === 'admin');
+    const adminUser = users.find(u => u.email.toLowerCase() === cleanEmail && (u.role === 'admin' || u.role === 'assistant'));
 
     if (!adminUser) {
       return { success: false, error: 'No administrative account found for this email address.' };
@@ -624,6 +730,254 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setCurrentUserId(adminUser.id);
     setIsAuthenticated(true);
+    return { success: true };
+  };
+
+  const requestCredentialRecovery = (
+    identifier: string,
+    category: ResidentSupportCategory,
+    message: string
+  ): { success: boolean; error?: string } => {
+    if (category === 'Other' && !message.trim()) {
+      return { success: false, error: 'Please describe your question or issue.' };
+    }
+    const cleanInput = identifier.trim().toLowerCase();
+    const user = users.find(candidate =>
+      candidate.email.toLowerCase() === cleanInput ||
+      (candidate.phone && candidate.phone.replace(/\D/g, '') === cleanInput.replace(/\D/g, ''))
+    );
+    if (!user || user.role !== 'resident') {
+      return { success: false, error: 'No resident account was found with those details.' };
+    }
+
+    const request: ResidentSupportRequest = {
+      id: `support-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      category,
+      message: message.trim() || `Resident requested ${category.toLowerCase()}.`,
+      status: 'open',
+      requestedAt: new Date().toISOString(),
+    };
+    const updatedUser = { ...user, supportRequests: [...(user.supportRequests || []), request] };
+    setUsers(prev => prev.map(candidate => candidate.id === user.id ? updatedUser : candidate));
+    persistDocToCloud('users', user.id, updatedUser);
+
+    users.filter(candidate => candidate.role === 'admin' || candidate.role === 'assistant').forEach(admin => {
+      pushNotification({
+        userId: admin.id,
+        title: 'Resident support request',
+        message: `${user.name} submitted a request: ${category}.`,
+        type: 'system',
+        linkTab: 'admin',
+        relatedId: user.id,
+      });
+    });
+    return { success: true };
+  };
+
+  const resolveResidentSupportRequest = (
+    userId: string,
+    requestId: string,
+    resolution: string
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'assistant') {
+      return { success: false, error: 'Only an administrator or assistant can resolve resident requests.' };
+    }
+    if (!resolution.trim()) return { success: false, error: 'Add a resolution note before closing the request.' };
+    const resident = users.find(user => user.id === userId && user.role === 'resident');
+    const ticket = resident?.supportRequests?.find(request => request.id === requestId && request.status === 'open');
+    if (!resident || !ticket) return { success: false, error: 'Open resident request not found.' };
+
+    const adminMessage: ResidentSupportMessage = {
+      id: `support-message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sender: 'admin',
+      senderName: currentUser.name,
+      message: resolution.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const updatedUser: UserProfile = {
+      ...resident,
+      supportRequests: resident.supportRequests?.map(request => request.id === requestId
+        ? {
+            ...request,
+            status: 'resolved',
+            resolution: resolution.trim(),
+            resolvedAt: adminMessage.createdAt,
+            resolvedBy: currentUser.email,
+            messages: [...(request.messages || []), adminMessage],
+          }
+        : request),
+    };
+    setUsers(prev => prev.map(user => user.id === userId ? updatedUser : user));
+    persistDocToCloud('users', userId, updatedUser);
+    pushNotification({
+      userId,
+      title: 'Your support request has been resolved',
+      message: `Your "${ticket.category}" request has been resolved. Message from ${currentUser.name}: ${resolution.trim()}`,
+      type: 'system',
+      linkTab: 'requests',
+      relatedId: requestId,
+    });
+    return { success: true };
+  };
+
+  const getResidentSupportByEmail = (
+    email: string
+  ): { residentName: string; requests: ResidentSupportRequest[] } | null => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return null;
+    const resident = users.find(user =>
+      user.role === 'resident' && user.email.trim().toLowerCase() === normalizedEmail
+    );
+    if (!resident) return null;
+    const requests = (resident.supportRequests || [])
+      .filter(request => request.category === 'Forgot password' || request.category === 'Forgot security PIN')
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
+    return requests.length ? { residentName: resident.name, requests } : null;
+  };
+
+  const appendSupportMessage = (
+    resident: UserProfile,
+    requestId: string,
+    sender: ResidentSupportMessage['sender'],
+    message: string,
+    senderName: string
+  ): { success: boolean; error?: string } => {
+    const cleanMessage = message.trim();
+    if (!cleanMessage) return { success: false, error: 'Write a message before sending.' };
+    const request = resident.supportRequests?.find(item => item.id === requestId);
+    if (!request) return { success: false, error: 'Support conversation not found.' };
+    if (request.status === 'resolved' && sender === 'resident') {
+      return { success: false, error: 'This request is resolved. Submit a new request to continue getting help.' };
+    }
+
+    const newMessage: ResidentSupportMessage = {
+      id: `support-message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sender,
+      senderName,
+      message: cleanMessage,
+      createdAt: new Date().toISOString(),
+    };
+    const updatedUser: UserProfile = {
+      ...resident,
+      supportRequests: resident.supportRequests?.map(item =>
+        item.id === requestId ? { ...item, messages: [...(item.messages || []), newMessage] } : item
+      ),
+    };
+    setUsers(previous => previous.map(user => user.id === resident.id ? updatedUser : user));
+    persistDocToCloud('users', resident.id, updatedUser);
+    return { success: true };
+  };
+
+  const sendResidentSupportMessage = (
+    email: string,
+    requestId: string,
+    message: string
+  ): { success: boolean; error?: string } => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const resident = users.find(user =>
+      user.role === 'resident' && user.email.trim().toLowerCase() === normalizedEmail
+    );
+    if (!resident) return { success: false, error: 'No resident account was found for that email.' };
+    const request = resident.supportRequests?.find(item => item.id === requestId);
+    if (!request || (request.category !== 'Forgot password' && request.category !== 'Forgot security PIN')) {
+      return { success: false, error: 'Credential recovery conversation not found.' };
+    }
+    const result = appendSupportMessage(resident, requestId, 'resident', message, resident.name);
+    if (result.success) {
+      users.filter(user => user.role === 'admin' || user.role === 'assistant').forEach(admin => {
+        pushNotification({
+          userId: admin.id,
+          title: 'Resident replied in support chat',
+          message: `${resident.name} sent a message about ${request.category}.`,
+          type: 'system',
+          linkTab: 'admin',
+          relatedId: requestId,
+        });
+      });
+    }
+    return result;
+  };
+
+  const sendAdminSupportMessage = (
+    userId: string,
+    requestId: string,
+    message: string
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'assistant') {
+      return { success: false, error: 'Only an administrator or assistant can reply to resident support.' };
+    }
+    const resident = users.find(user => user.id === userId && user.role === 'resident');
+    if (!resident) return { success: false, error: 'Resident account not found.' };
+    const result = appendSupportMessage(resident, requestId, 'admin', message, currentUser.name);
+    if (result.success) {
+      pushNotification({
+        userId,
+        title: 'New message from Resident Support',
+        message: `${currentUser.name} replied to your ${resident.supportRequests?.find(item => item.id === requestId)?.category || 'support'} request.`,
+        type: 'system',
+        linkTab: 'requests',
+        relatedId: requestId,
+      });
+    }
+    return result;
+  };
+
+  const resetResidentCredentials = (
+    userId: string,
+    credentials: { password?: string; securityPin?: string; supportRequestId?: string; message?: string }
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'assistant') {
+      return { success: false, error: 'Only an administrator can reset resident credentials.' };
+    }
+    const resident = users.find(user => user.id === userId && user.role === 'resident');
+    if (!resident) return { success: false, error: 'Resident account not found.' };
+    if (credentials.password !== undefined && credentials.password.trim().length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters long.' };
+    }
+    if (credentials.securityPin !== undefined && !/^\d{4,8}$/.test(credentials.securityPin.trim())) {
+      return { success: false, error: 'Security PIN must be 4 to 8 digits.' };
+    }
+    if (credentials.password === undefined && credentials.securityPin === undefined) {
+      return { success: false, error: 'Enter a new password, security PIN, or both.' };
+    }
+    if (credentials.message?.trim() && !credentials.supportRequestId) {
+      return { success: false, error: 'A support request is required to send a message to the resident.' };
+    }
+    if (credentials.supportRequestId && !resident.supportRequests?.some(request => request.id === credentials.supportRequestId)) {
+      return { success: false, error: 'Support conversation not found.' };
+    }
+
+    const message = credentials.message?.trim();
+    const resetMessage: ResidentSupportMessage | null = message && credentials.supportRequestId ? {
+      id: `support-message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sender: 'admin',
+      senderName: currentUser.name,
+      message,
+      createdAt: new Date().toISOString(),
+    } : null;
+    const updatedUser: UserProfile = {
+      ...resident,
+      ...(credentials.password !== undefined ? { password: credentials.password.trim() } : {}),
+      ...(credentials.securityPin !== undefined ? { securityPin: credentials.securityPin.trim() } : {}),
+      ...(resetMessage && credentials.supportRequestId ? {
+        supportRequests: resident.supportRequests?.map(request =>
+          request.id === credentials.supportRequestId
+            ? { ...request, messages: [...(request.messages || []), resetMessage] }
+            : request
+        ),
+      } : {}),
+    };
+    setUsers(prev => prev.map(user => user.id === userId ? updatedUser : user));
+    persistDocToCloud('users', userId, updatedUser);
+    pushNotification({
+      userId,
+      title: 'Account credentials updated',
+      message: message
+        ? `An administrator reset your requested credentials. Message from ${currentUser.name}: ${message}`
+        : 'An administrator has reset your requested account credentials. Please sign in using the new credentials.',
+      type: 'system',
+      linkTab: 'requests',
+    });
     return { success: true };
   };
 
@@ -705,8 +1059,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     password: string;
     phone: string;
     neighborhood: string;
-    role?: 'user';
+    role?: 'resident';
     securityPin?: string;
+    paymentMethods?: PaymentReceivingMethod[];
     mobileBankingProvider?: string;
     mobileBankingHandle?: string;
     bankName?: string;
@@ -728,7 +1083,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       password: data.password,
       securityPin: data.securityPin?.trim() || '1234',
       phone: data.phone.trim(),
-      role: 'user',
+      role: 'resident',
+      roleVersion: 2,
       neighborhood: data.neighborhood,
       coordinates: { lat: 37.775, lng: -122.418 },
       rating: 5.0,
@@ -739,10 +1095,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isBlacklisted: false,
       joinedDate: new Date().toISOString().slice(0, 10),
       lenderPaymentDetails: {
-        mobileBankingProvider: data.mobileBankingProvider || 'bKash',
-        mobileBankingHandle: data.mobileBankingHandle || data.phone || data.email,
+        paymentMethods: data.paymentMethods,
+        mobileBankingProvider: data.paymentMethods?.[0]?.provider || data.mobileBankingProvider || 'bKash',
+        mobileBankingHandle: data.paymentMethods?.[0]?.handle || data.mobileBankingHandle || data.phone || data.email,
         bankName: data.bankName || '',
-        accountNumber: data.accountNumber || '',
+        accountNumber: data.paymentMethods?.find(method => method.provider === 'Bank Account')?.handle || data.accountNumber || '',
         cashAccepted: true,
       },
       flags: {
@@ -779,6 +1136,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     password: string;
     securityCode: string;
   }): { success: boolean; error?: string } => {
+    if (currentUser.email.toLowerCase() !== MAIN_ADMIN_EMAIL) {
+      return { success: false, error: `Only Main Admin (${MAIN_ADMIN_EMAIL}) can create administrative accounts.` };
+    }
+
     const code = data.securityCode.trim();
     if (code !== adminSecurityCode && code !== '2580') {
       return { success: false, error: 'Security Authorization Denied: Invalid Administrative Security Code.' };
@@ -801,7 +1162,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       securityPin: '2580',
       phone: '(555) 000-ADMN',
       role: 'admin',
-      neighborhood: 'District Municipal Center',
+      roleVersion: 2,
+      neighborhood: 'Hamlet Tower',
       coordinates: { lat: 37.775, lng: -122.418 },
       rating: 5.0,
       totalBorrowed: 0,
@@ -901,6 +1263,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return u;
     }));
+  };
+
+  const updateUserStanding = (userId: string, standing: ResidentStanding) => {
+    setUsers(prev => prev.map(user => {
+      if (user.id !== userId) return user;
+      const updated = { ...user, standing };
+      persistDocToCloud('users', user.id, updated);
+      return updated;
+    }));
+  };
+
+  const updateUserRole = (
+    userId: string,
+    role: Exclude<PlatformRole, 'assistant'>
+  ): { success: boolean; error?: string } => {
+    if (currentUser.email.trim().toLowerCase() !== MAIN_ADMIN_EMAIL) {
+      return { success: false, error: `Only Main Admin (${MAIN_ADMIN_EMAIL}) can change account roles.` };
+    }
+    if (!['admin', 'resident', 'moderator'].includes(role)) {
+      return { success: false, error: 'Invalid account role.' };
+    }
+
+    const target = users.find(user => user.id === userId);
+    if (!target || target.email.trim().toLowerCase() === MAIN_ADMIN_EMAIL || target.role === 'assistant') {
+      return { success: false, error: 'The main admin and assistant account roles are protected.' };
+    }
+
+    setUsers(prev => prev.map(user => {
+      if (user.id !== userId) return user;
+      const updated = { ...user, role, roleVersion: 2 };
+      persistDocToCloud('users', user.id, updated);
+      return updated;
+    }));
+    return { success: true };
+  };
+
+  const adminRemoveResident = (userId: string): { success: boolean; error?: string } => {
+    const resident = users.find(user => user.id === userId);
+    if (!resident || resident.role !== 'resident') {
+      return { success: false, error: 'Only resident accounts can be removed.' };
+    }
+
+    const hasUnresolvedRental = rentalRequests.some(request =>
+      (request.borrowerId === userId || request.lenderId === userId) &&
+      !['returned', 'expired', 'rejected', 'resolved'].includes(request.status)
+    );
+    if (hasUnresolvedRental) {
+      return { success: false, error: 'Resolve or close this resident’s active rentals and disputes before removing the account.' };
+    }
+
+    const residentAssets = assets.filter(asset => asset.ownerId === userId);
+    setUsers(prev => prev.filter(user => user.id !== userId));
+    setAssets(prev => prev.filter(asset => asset.ownerId !== userId));
+    deleteDocFromCloud('users', userId);
+    residentAssets.forEach(asset => deleteDocFromCloud('assets', asset.id));
+    return { success: true };
   };
 
   const settleAdminFine = () => {
@@ -1899,7 +2317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAuthenticated,
         currentUser,
         users,
-        isAdmin: currentUser.role === 'admin',
+        isAdmin: currentUser.role === 'admin' || currentUser.role === 'assistant',
         adminSecurityCode,
         login,
         adminLogin,
@@ -1907,9 +2325,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetUserSecurityPin,
         register,
         adminRegister,
+        requestCredentialRecovery,
+        resetResidentCredentials,
+        resolveResidentSupportRequest,
+        getResidentSupportByEmail,
+        sendResidentSupportMessage,
+        sendAdminSupportMessage,
         logout,
         setCurrentUserById,
         updateUserProfile,
+        updateUserStanding,
+        updateUserRole,
+        adminRemoveResident,
         settleAdminFine,
         adminForceTransitionRequest,
         adminDeleteAsset,

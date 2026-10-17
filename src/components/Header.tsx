@@ -229,8 +229,12 @@ export const Header: React.FC<HeaderProps> = ({
                         <span className="text-[10px] text-red-600 font-bold tracking-wider">[BLACKLISTED]</span>
                       ) : currentUser.rating < 3.0 ? (
                         <span className="text-[10px] text-red-600 font-bold">[RED BADGE]</span>
-                      ) : currentUser.role === 'admin' ? (
-                        <span className="text-[10px] text-amber-600 font-bold font-mono">[ADMIN]</span>
+                      ) : currentUser.role === 'admin' || currentUser.role === 'assistant' ? (
+                        <span className="text-[10px] text-amber-600 font-bold font-mono">
+                          {currentUser.role === 'assistant' ? '[ASSISTANT ADMIN]' : '[ADMIN]'}
+                        </span>
+                      ) : currentUser.role === 'moderator' ? (
+                        <span className="text-[10px] text-blue-600 font-bold font-mono">[MODERATOR]</span>
                       ) : (
                         <span className="text-[10px] text-stone-500 font-normal">Resident</span>
                       )}
@@ -259,7 +263,13 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                         <div className="flex items-center gap-2 mt-2 text-[11px]">
                           <span className="px-1.5 py-0.5 rounded bg-stone-200 text-stone-800 font-semibold font-mono text-[10px]">
-                            {currentUser.role === 'admin' ? 'System Administrator' : 'Community Resident'}
+                            {currentUser.role === 'admin'
+                              ? 'System Administrator'
+                              : currentUser.role === 'assistant'
+                                ? 'Assistant Administrator'
+                                : currentUser.role === 'moderator'
+                                  ? 'Moderator'
+                                  : 'Community Resident'}
                           </span>
                           <span className="text-stone-400">&middot;</span>
                           <span className="text-stone-600 font-mono">

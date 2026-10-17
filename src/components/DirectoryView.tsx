@@ -170,7 +170,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={viewScope === 'mine' ? "Search your listed equipment..." : "Search tools, pressure washers, mini-fridges, SDS drills..."}
+              placeholder={viewScope === 'mine' ? "Search your listed equipment..." : "Search equipment..."}
               className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
             />
           </div>

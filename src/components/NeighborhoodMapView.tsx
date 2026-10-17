@@ -296,10 +296,11 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
               <line x1="250" y1="20" x2="250" y2="480" stroke="#1e293b" strokeWidth="1" />
 
               {/* Sector Labels */}
-              <text x="350" y="80" fill="#64748b" fontSize="10" fontFamily="monospace">Oakridge North</text>
-              <text x="60" y="380" fill="#64748b" fontSize="10" fontFamily="monospace">West Elm Park</text>
-              <text x="340" y="420" fill="#64748b" fontSize="10" fontFamily="monospace">Riverdale Commons</text>
-              <text x="40" y="100" fill="#64748b" fontSize="10" fontFamily="monospace">Highland Terrace</text>
+              <text x="350" y="80" fill="#64748b" fontSize="10" fontFamily="monospace">Nazrul Palace</text>
+              <text x="60" y="380" fill="#64748b" fontSize="10" fontFamily="monospace">Al Imtiaz Residence</text>
+              <text x="340" y="420" fill="#64748b" fontSize="10" fontFamily="monospace">Sigma Tower</text>
+              <text x="40" y="100" fill="#64748b" fontSize="10" fontFamily="monospace">Aura villa</text>
+              <text x="165" y="65" fill="#64748b" fontSize="10" fontFamily="monospace">Hamlet Tower</text>
 
               {/* Center User Pin with Live Pulsating Radar Waves */}
               <circle cx="250" cy="250" r="28" fill="rgba(59, 130, 246, 0.15)">

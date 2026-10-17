@@ -19,7 +19,7 @@ CREATE TABLE users (
     email VARCHAR(191) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'user',
-    neighborhood VARCHAR(100) NOT NULL DEFAULT 'Oakridge North',
+    neighborhood VARCHAR(100) NOT NULL DEFAULT 'Hamlet Tower',
     rating NUMERIC(3,2) NOT NULL DEFAULT 5.00,
     rating_count INTEGER NOT NULL DEFAULT 0,
     total_lent INTEGER NOT NULL DEFAULT 0,

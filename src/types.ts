@@ -65,6 +65,42 @@ export interface PointOfInterest {
   phone: string;
 }
 
+export interface PaymentReceivingMethod {
+  provider: 'bKash' | 'Nagad' | 'Rocket' | 'Bank Account';
+  handle: string;
+}
+
+export type ResidentStanding = 'Active' | 'Red Badge' | 'Monitoring' | 'Suspicious' | 'Improving';
+export type PlatformRole = 'admin' | 'assistant' | 'resident' | 'moderator';
+
+export interface CredentialRecoveryRequest {
+  password: boolean;
+  securityPin: boolean;
+  requestedAt: string;
+}
+
+export type ResidentSupportCategory = 'Forgot password' | 'Forgot security PIN' | 'Other';
+
+export interface ResidentSupportMessage {
+  id: string;
+  sender: 'resident' | 'admin';
+  senderName: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface ResidentSupportRequest {
+  id: string;
+  category: ResidentSupportCategory;
+  message: string;
+  status: 'open' | 'resolved';
+  requestedAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  resolution?: string;
+  messages?: ResidentSupportMessage[];
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -72,7 +108,10 @@ export interface UserProfile {
   password?: string;
   securityPin?: string; // 4-6 digit recovery & authentication PIN
   phone?: string;
-  role: 'user' | 'admin';
+  role: PlatformRole;
+  roleVersion?: number;
+  credentialRecoveryRequest?: CredentialRecoveryRequest | null;
+  supportRequests?: ResidentSupportRequest[];
   avatar?: string;
   neighborhood: string;
   coordinates: { lat: number; lng: number };
@@ -82,10 +121,12 @@ export interface UserProfile {
   onTimeReturnCount: number;
   overdueInstances: number;
   isBlacklisted: boolean;
+  standing?: ResidentStanding;
   blacklistedReason?: string;
   adminFinePending?: number;
   joinedDate?: string;
   lenderPaymentDetails?: {
+    paymentMethods?: PaymentReceivingMethod[];
     mobileBankingProvider?: string; // 'bKash' | 'Nagad' | 'Rocket' | 'Bank Account'
     mobileBankingHandle?: string;
     bankName?: string;

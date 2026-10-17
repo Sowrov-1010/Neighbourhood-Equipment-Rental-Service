@@ -12,8 +12,6 @@ import {
   AlertTriangle,
   UserPlus,
   LogIn,
-  RefreshCw,
-  CheckCircle2,
   Crown
 } from 'lucide-react';
 
@@ -23,56 +21,19 @@ interface AdminAuthModalProps {
 }
 
 export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSuccess }) => {
-  const { adminLogin, adminRegister, adminSecurityCode, resetAdminSecurityCode } = useApp();
+  const { currentUser, adminLogin, adminRegister, adminSecurityCode } = useApp();
 
-  const [mode, setMode] = useState<'login' | 'register' | 'reset_code'>('login');
-  const [email, setEmail] = useState('jahid_hassan1010@uits.edu.bd');
-  const [password, setPassword] = useState('adminpassword');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [securityCode, setSecurityCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // Reset Code Form state
-  const [resetAdminEmail, setResetAdminEmail] = useState('jahid_hassan1010@uits.edu.bd');
-  const [newCode, setNewCode] = useState('');
-  const [confirmNewCode, setConfirmNewCode] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    setSuccessMsg('');
-
-    // RESET SECURITY CODE SUBMISSION
-    if (mode === 'reset_code') {
-      if (resetAdminEmail.trim().toLowerCase() !== 'jahid_hassan1010@uits.edu.bd') {
-        setErrorMsg('Authorization Failed: Only main admin "jahid_hassan1010@uits.edu.bd" has master authority to reset the admin login security code.');
-        return;
-      }
-      if (newCode.trim().length < 4) {
-        setErrorMsg('New security code must be at least 4 alphanumeric characters.');
-        return;
-      }
-      if (newCode !== confirmNewCode) {
-        setErrorMsg('New security codes do not match.');
-        return;
-      }
-
-      const res = resetAdminSecurityCode(resetAdminEmail, newCode.trim());
-      if (!res.success) {
-        setErrorMsg(res.error || 'Failed to reset security code.');
-        return;
-      }
-
-      setSuccessMsg(`Security code updated successfully! New code is active for admin login and account opening.`);
-      setSecurityCode(newCode.trim());
-      setTimeout(() => {
-        setMode('login');
-        setSuccessMsg('');
-      }, 1800);
-      return;
-    }
 
     // Check security code
     const enteredCode = securityCode.trim();
@@ -140,32 +101,24 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSucce
         <div className="px-6 pt-4 flex gap-1.5 border-b border-stone-800 pb-3 overflow-x-auto">
           <button
             type="button"
-            onClick={() => { setMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
+            onClick={() => { setMode('login'); setErrorMsg(''); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
               mode === 'login' ? 'bg-stone-800 text-white border border-stone-700' : 'text-stone-400 hover:text-white'
             }`}
           >
             Admin Sign In
           </button>
-          <button
-            type="button"
-            onClick={() => { setMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-              mode === 'register' ? 'bg-stone-800 text-white border border-stone-700' : 'text-stone-400 hover:text-white'
-            }`}
-          >
-            Provision Authority
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('reset_code'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-              mode === 'reset_code' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-stone-400 hover:text-amber-300'
-            }`}
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>Reset Security Code</span>
-          </button>
+          {currentUser.email.toLowerCase() === 'jahid_hassan1010@uits.edu.bd' && (
+            <button
+              type="button"
+              onClick={() => { setMode('register'); setErrorMsg(''); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                mode === 'register' ? 'bg-stone-800 text-white border border-stone-700' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              Provision Authority
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -176,92 +129,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSucce
             </div>
           )}
 
-          {successMsg && (
-            <div className="p-3 bg-emerald-950/80 border border-emerald-800 text-emerald-200 rounded-lg text-xs flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-
-          {/* MODE: RESET SECURITY CODE */}
-          {mode === 'reset_code' ? (
-            <div className="space-y-4">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs space-y-1">
-                <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Main Admin Master Authorization Clearance</span>
-                </div>
-                <p className="text-stone-300 text-[11px] leading-relaxed">
-                  Only the platform main admin <strong className="text-amber-200">jahid_hassan1010@uits.edu.bd</strong> has clearance to reset the security authorization code required for administrative login and account opening.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-300 uppercase tracking-wide block mb-1">
-                  Main Admin Email
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    required
-                    value={resetAdminEmail}
-                    onChange={(e) => setResetAdminEmail(e.target.value)}
-                    placeholder="jahid_hassan1010@uits.edu.bd"
-                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-white focus:border-amber-500 focus:outline-none pl-8 font-mono"
-                  />
-                  <Mail className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-300 uppercase tracking-wide block mb-1">
-                  New Security Authorization Code
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    required
-                    value={newCode}
-                    onChange={(e) => setNewCode(e.target.value)}
-                    placeholder="Minimum 4 characters (e.g. 2580)"
-                    minLength={4}
-                    maxLength={12}
-                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-white focus:border-amber-500 focus:outline-none pl-8 font-mono tracking-widest"
-                  />
-                  <KeyRound className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-300 uppercase tracking-wide block mb-1">
-                  Confirm New Security Code
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    required
-                    value={confirmNewCode}
-                    onChange={(e) => setConfirmNewCode(e.target.value)}
-                    placeholder="Re-type new security code"
-                    minLength={4}
-                    maxLength={12}
-                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-white focus:border-amber-500 focus:outline-none pl-8 font-mono tracking-widest"
-                  />
-                  <Lock className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Reset Admin Security Code</span>
-              </button>
-            </div>
-          ) : (
-            // MODE: LOGIN OR REGISTER
-            <>
+          <>
               {mode === 'register' && (
                 <div>
                   <label className="text-xs font-bold text-stone-300 uppercase tracking-wide block mb-1">
@@ -272,7 +140,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSucce
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Officer Marcus Cole"
+                    placeholder="Enter administrator name"
                     className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-white focus:border-amber-500 focus:outline-none"
                   />
                 </div>
@@ -288,7 +156,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSucce
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="jahid_hassan1010@uits.edu.bd"
+                    placeholder="Enter administrative email"
                     className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-lg text-xs text-white focus:border-amber-500 focus:outline-none pl-8 font-mono"
                   />
                   <Mail className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -325,13 +193,6 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSucce
                     <KeyRound className="w-3.5 h-3.5" />
                     <span>Security Authorization Code</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => { setMode('reset_code'); setErrorMsg(''); setSuccessMsg(''); }}
-                    className="text-[10px] text-amber-400 hover:underline font-mono"
-                  >
-                    Reset Code?
-                  </button>
                 </div>
                 <input
                   type="password"
@@ -354,8 +215,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ onClose, onSucce
                 {mode === 'login' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
                 <span>{mode === 'login' ? 'Authenticate & Enter Admin Console' : 'Register Admin Account'}</span>
               </button>
-            </>
-          )}
+          </>
         </form>
       </div>
     </div>

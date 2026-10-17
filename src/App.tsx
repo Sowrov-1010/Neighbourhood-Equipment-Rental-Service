@@ -21,6 +21,7 @@ import { ReviewModal } from './components/ReviewModal';
 import { AuthModal } from './components/AuthModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
 import { UserProfileModal } from './components/UserProfileModal';
+import { ResidentSupportChat } from './components/ResidentSupportChat';
 import { Asset, RentalRequest } from './types';
 import { KeyRound, ShieldAlert, ArrowRight, Building2 } from 'lucide-react';
 
@@ -73,6 +74,7 @@ function MainApp() {
         <AdminConsoleLayout
           onExitToResidentView={() => setAdminViewMode('resident')}
         />
+        <ResidentSupportChat />
         {/* Modals available if needed */}
       </>
     );
@@ -115,6 +117,7 @@ function MainApp() {
         onOpenProfile={() => setShowProfileModal(true)}
         onOpenDatabaseHub={() => setAdminViewMode('console')}
       />
+      <ResidentSupportChat />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-8">
         {activeTab === 'directory' && (

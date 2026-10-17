@@ -342,7 +342,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
                     type="text"
                     value={senderAccount}
                     onChange={(e) => setSenderAccount(e.target.value)}
-                    placeholder="e.g. 017XXXXXXXX"
+                    placeholder="Enter wallet or account number"
                     className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-1 focus:ring-stone-600"
                   />
                 </div>
@@ -355,7 +355,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
                     type="text"
                     value={txnId}
                     onChange={(e) => setTxnId(e.target.value)}
-                    placeholder="e.g. BKS-889123 or TRX-40192"
+                    placeholder="Enter transaction ID or reference"
                     className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs font-mono uppercase font-bold focus:outline-none focus:ring-1 focus:ring-stone-600"
                   />
                 </div>

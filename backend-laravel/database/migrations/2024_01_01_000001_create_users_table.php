@@ -18,7 +18,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->enum('role', ['user', 'admin'])->default('user')->index();
-            $table->string('neighborhood', 100)->default('Oakridge North');
+            $table->string('neighborhood', 100)->default('Hamlet Tower');
             $table->decimal('rating', 3, 2)->default(5.00);
             $table->unsignedInteger('rating_count')->default(0);
             $table->unsignedInteger('total_lent')->default(0);

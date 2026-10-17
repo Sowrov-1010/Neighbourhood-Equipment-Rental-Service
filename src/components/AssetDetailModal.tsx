@@ -67,8 +67,8 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
   const [endDate, setEndDate] = useState(`${tomorrowStr}T17:00`);
   
   // Payment Method Dropdown state
-  const [paymentChoice, setPaymentChoice] = useState<'bkash' | 'nagad' | 'rocket' | 'bank_account' | 'cash' | 'none'>(
-    asset.pricingType === 'free' ? 'none' : 'bkash'
+  const [paymentChoice, setPaymentChoice] = useState<'Bkash' | 'Nagad' | 'Rocket' | 'Bank Account' | 'Cash' | 'none'>(
+    asset.pricingType === 'free' ? 'none' : 'Bkash'
   );
   
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -769,7 +769,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                   <div className="text-amber-900 flex items-center gap-1.5 font-medium">
                     <UserCheck className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
-                      You are logged in as this tool's owner (<strong>{asset.ownerName}</strong>). Clicking borrow will automatically place the request as neighbor <strong>{users.find(u => u.id !== asset.ownerId)?.name || 'Sarah Jenkins'}</strong>.
+                      You are logged in as this tool's owner (<strong>{asset.ownerName}</strong>). Clicking borrow will automatically place the request as neighbor <strong>{users.find(u => u.id !== asset.ownerId)?.name || 'Nusrat Jahan'}</strong>.
                     </span>
                   </div>
                 </div>

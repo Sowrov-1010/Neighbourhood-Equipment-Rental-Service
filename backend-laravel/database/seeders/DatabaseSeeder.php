@@ -34,12 +34,12 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // 2. Seed Resident Accounts
-        $sarah = User::create([
-            'name' => 'Sarah Jenkins',
-            'email' => 'sarah@example.com',
+        $nusrat = User::create([
+            'name' => 'Nusrat Jahan',
+            'email' => 'nusrat.jahan@neighborhood.org',
             'password' => Hash::make('password123'),
             'role' => 'user',
-            'neighborhood' => 'Oakridge North',
+            'neighborhood' => 'Nazrul Palace',
             'rating' => 4.95,
             'rating_count' => 38,
             'total_lent' => 24,
@@ -48,12 +48,12 @@ class DatabaseSeeder extends Seeder
             'longitude' => -122.4150,
         ]);
 
-        $marcus = User::create([
-            'name' => 'Marcus Vance',
-            'email' => 'marcus@example.com',
+        $rahim = User::create([
+            'name' => 'Rahim Uddin',
+            'email' => 'rahim.uddin@neighborhood.org',
             'password' => Hash::make('password123'),
             'role' => 'user',
-            'neighborhood' => 'Oakridge South',
+            'neighborhood' => 'Sigma Tower',
             'rating' => 4.70,
             'rating_count' => 19,
             'total_lent' => 11,
@@ -67,7 +67,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'chloe@example.com',
             'password' => Hash::make('password123'),
             'role' => 'user',
-            'neighborhood' => 'Highland Glen',
+            'neighborhood' => 'Aura villa',
             'rating' => 2.40, // Red badge tier
             'rating_count' => 5,
             'total_lent' => 1,
@@ -80,7 +80,7 @@ class DatabaseSeeder extends Seeder
         // 3. Seed Equipment with Spatial Coordinates
         $tools = [
             [
-                'owner_id' => $sarah->id,
+                'owner_id' => $nusrat->id,
                 'name' => 'DeWalt SDS-Plus Rotary Hammer 1-1/8"',
                 'description' => 'Heavy duty concrete drilling hammer. Includes SDS chisels and safety goggles.',
                 'category' => 'rotary_hammer',
@@ -89,13 +89,13 @@ class DatabaseSeeder extends Seeder
                 'condition' => 'good',
                 'brand' => 'DeWalt',
                 'model_number' => 'D25133K',
-                'neighborhood' => 'Oakridge North',
+                'neighborhood' => 'Nazrul Palace',
                 'latitude' => 37.7790,
                 'longitude' => -122.4150,
                 'primary_photo_url' => 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80',
             ],
             [
-                'owner_id' => $marcus->id,
+                'owner_id' => $rahim->id,
                 'name' => 'Little Giant 22-Foot Multi-Position Ladder',
                 'description' => 'Type 1AA 375 lb rated multi-use ladder. Converts to A-frame, extension, staircase.',
                 'category' => 'ladder',
@@ -104,13 +104,13 @@ class DatabaseSeeder extends Seeder
                 'condition' => 'pristine',
                 'brand' => 'Little Giant',
                 'model_number' => 'Velocity M22',
-                'neighborhood' => 'Oakridge South',
+                'neighborhood' => 'Sigma Tower',
                 'latitude' => 37.7710,
                 'longitude' => -122.4230,
                 'primary_photo_url' => 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80',
             ],
             [
-                'owner_id' => $sarah->id,
+                'owner_id' => $nusrat->id,
                 'name' => 'Sun Joe SPX3000 Electric Pressure Washer',
                 'description' => '2030 Max PSI 1.76 GPM with Dual Soap Tanks. Perfect for patios and house siding.',
                 'category' => 'pressure_washer',
@@ -119,7 +119,7 @@ class DatabaseSeeder extends Seeder
                 'condition' => 'good',
                 'brand' => 'Sun Joe',
                 'model_number' => 'SPX3000',
-                'neighborhood' => 'Oakridge North',
+                'neighborhood' => 'Nazrul Palace',
                 'latitude' => 37.7790,
                 'longitude' => -122.4150,
                 'primary_photo_url' => 'https://images.unsplash.com/photo-1581783898377-1c85bf937427?auto=format&fit=crop&w=800&q=80',
@@ -137,8 +137,8 @@ class DatabaseSeeder extends Seeder
         // 4. Seed initial sample rental request
         RentalRequest::create([
             'tool_id' => 1,
-            'borrower_id' => $marcus->id,
-            'lender_id' => $sarah->id,
+            'borrower_id' => $rahim->id,
+            'lender_id' => $nusrat->id,
             'status' => 'active_rental',
             'start_date' => now()->toDateString(),
             'end_date' => now()->addDays(2)->toDateString(),

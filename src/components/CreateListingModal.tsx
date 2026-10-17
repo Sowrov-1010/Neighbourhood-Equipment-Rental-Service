@@ -185,7 +185,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. DeWalt 12-inch Miter Saw, Whirlpool Portable Dehumidifier"
+              placeholder="Enter asset title or model name"
               className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
             />
           </div>
@@ -330,7 +330,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
                       type="text"
                       value={bankingHandle}
                       onChange={(e) => setBankingHandle(e.target.value)}
-                      placeholder="e.g. 01711-XXXXXX or Account No."
+                      placeholder="Enter account number or payment handle"
                       className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono focus:ring-1 focus:ring-stone-600 focus:outline-none"
                     />
                   </div>
@@ -487,7 +487,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
                   type="url"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://example.com/images/tool.jpg"
+                  placeholder="Enter image URL"
                   className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs font-mono focus:ring-1 focus:ring-stone-600 focus:outline-none"
                 />
                 {imageUrl && (
@@ -507,7 +507,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
               type="text"
               value={featuresText}
               onChange={(e) => setFeaturesText(e.target.value)}
-              placeholder="e.g. Includes extra bits, GFCI plug, Carrying case"
+              placeholder="Enter included features, separated by commas"
               className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
             />
           </div>

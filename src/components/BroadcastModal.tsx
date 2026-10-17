@@ -78,7 +78,7 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ onClose }) => {
               type="text"
               value={requiredItem}
               onChange={(e) => setRequiredItem(e.target.value)}
-              placeholder="e.g. Concrete mixer, Tile wet saw, Dehumidifier, Engine hoist"
+              placeholder="Enter the tool or appliance you need"
               className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
             />
           </div>
@@ -146,7 +146,7 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ onClose }) => {
               rows={2}
               value={neededFor}
               onChange={(e) => setNeededFor(e.target.value)}
-              placeholder="e.g. Installing floating garage shelves into masonry wall over the weekend..."
+              placeholder="Describe your intended project or task"
               className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
             />
           </div>

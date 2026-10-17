@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { NEIGHBORHOODS } from '../data/neighborhoods';
 import { 
   X, 
   User, 
@@ -27,14 +28,6 @@ interface UserProfileModalProps {
   onClose: () => void;
   onOpenAuth: () => void;
 }
-
-const NEIGHBORHOODS = [
-  'Elmwood Heights',
-  'Oakridge North',
-  'West Elm Park',
-  'Riverdale Commons',
-  'Highland Terrace',
-];
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onOpenAuth }) => {
   const { 
@@ -307,7 +300,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
                       maxLength={8}
                       value={newPin}
                       onChange={(e) => setNewPin(e.target.value)}
-                      placeholder="e.g. 1234"
+                      placeholder="Enter new PIN"
                       className="w-full px-2.5 py-1.5 border border-stone-300 rounded text-xs font-mono tracking-widest text-center"
                     />
                   </div>
@@ -382,7 +375,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
                         required
                         value={newAdminCode}
                         onChange={(e) => setNewAdminCode(e.target.value)}
-                        placeholder="New Admin Code (e.g. 2580)"
+                        placeholder="Enter new admin code"
                         className="flex-1 px-2.5 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono"
                       />
                       <button

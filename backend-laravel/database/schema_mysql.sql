@@ -22,7 +22,7 @@ CREATE TABLE `users` (
   `email` VARCHAR(191) NOT NULL UNIQUE,
   `password` VARCHAR(255) NOT NULL,
   `role` ENUM('user', 'admin') NOT NULL DEFAULT 'user',
-  `neighborhood` VARCHAR(100) NOT NULL DEFAULT 'Oakridge North',
+  `neighborhood` VARCHAR(100) NOT NULL DEFAULT 'Hamlet Tower',
   `rating` DECIMAL(3,2) NOT NULL DEFAULT 5.00,
   `rating_count` INT UNSIGNED NOT NULL DEFAULT 0,
   `total_lent` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -173,15 +173,15 @@ CREATE TABLE `audit_logs` (
 -- ------------------------------------------------------------------------------
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `neighborhood`, `rating`, `rating_count`, `total_lent`, `total_borrowed`, `is_blacklisted`, `latitude`, `longitude`, `location`, `admin_security_hash`) VALUES
 (1, 'Eleanor Cross', 'admin@oakridge.gov', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'admin', 'District Civic Hub', 5.00, 124, 45, 8, 0, 37.7749000, -122.4194000, ST_SRID(POINT(-122.4194000, 37.7749000), 4326), '$2y$12$k8l7J9vU/qCg2uF.59z1Xe70wG4xT9l2Y8H1P0k9R7s5V3N2M1K0O'),
-(2, 'Sarah Jenkins', 'sarah@example.com', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'user', 'Oakridge North', 4.95, 38, 24, 6, 0, 37.7790000, -122.4150000, ST_SRID(POINT(-122.4150000, 37.7790000), 4326), NULL),
-(3, 'Marcus Vance', 'marcus@example.com', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'user', 'Oakridge South', 4.70, 19, 11, 14, 0, 37.7710000, -122.4230000, ST_SRID(POINT(-122.4230000, 37.7710000), 4326), NULL),
-(4, 'Chloe Lin', 'chloe@example.com', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'user', 'Highland Glen', 2.40, 5, 1, 4, 0, 37.7810000, -122.4080000, ST_SRID(POINT(-122.4080000, 37.7810000), 4326), NULL);
+(2, 'Nusrat Jahan', 'nusrat.jahan@neighborhood.org', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'user', 'Nazrul Palace', 4.95, 38, 24, 6, 0, 37.7790000, -122.4150000, ST_SRID(POINT(-122.4150000, 37.7790000), 4326), NULL),
+(3, 'Rahim Uddin', 'rahim.uddin@neighborhood.org', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'user', 'Sigma Tower', 4.70, 19, 11, 14, 0, 37.7710000, -122.4230000, ST_SRID(POINT(-122.4230000, 37.7710000), 4326), NULL),
+(4, 'Chloe Lin', 'chloe@example.com', '$2y$12$eOa98e.m5oIu/YwG1/2i8uE2mE95sN2m...', 'user', 'Aura villa', 2.40, 5, 1, 4, 0, 37.7810000, -122.4080000, ST_SRID(POINT(-122.4080000, 37.7810000), 4326), NULL);
 
 -- Seed Tools with Point Geometries
 INSERT INTO `tools` (`id`, `owner_id`, `name`, `description`, `category`, `pricing_type`, `daily_rate`, `condition`, `brand`, `model_number`, `primary_photo_url`, `is_available`, `neighborhood`, `latitude`, `longitude`, `location_point`) VALUES
-(1, 2, 'DeWalt SDS-Plus Rotary Hammer 1-1/8"', 'Heavy duty concrete drilling hammer. Includes SDS chisels and safety goggles.', 'rotary_hammer', 'daily_rate', 18.00, 'good', 'DeWalt', 'D25133K', 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80', 1, 'Oakridge North', 37.7790000, -122.4150000, ST_SRID(POINT(-122.4150000, 37.7790000), 4326)),
-(2, 3, 'Little Giant 22-Foot Multi-Position Ladder', 'Type 1AA 375 lb rated multi-use ladder. Converts to A-frame, extension, staircase.', 'ladder', 'free_community', 0.00, 'pristine', 'Little Giant', 'Velocity M22', 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80', 1, 'Oakridge South', 37.7710000, -122.4230000, ST_SRID(POINT(-122.4230000, 37.7710000), 4326)),
-(3, 2, 'Sun Joe SPX3000 Electric Pressure Washer', '2030 Max PSI 1.76 GPM with Dual Soap Tanks. Perfect for patios and house siding.', 'pressure_washer', 'daily_rate', 22.00, 'good', 'Sun Joe', 'SPX3000', 'https://images.unsplash.com/photo-1581783898377-1c85bf937427?auto=format&fit=crop&w=800&q=80', 1, 'Oakridge North', 37.7790000, -122.4150000, ST_SRID(POINT(-122.4150000, 37.7790000), 4326));
+(1, 2, 'DeWalt SDS-Plus Rotary Hammer 1-1/8"', 'Heavy duty concrete drilling hammer. Includes SDS chisels and safety goggles.', 'rotary_hammer', 'daily_rate', 18.00, 'good', 'DeWalt', 'D25133K', 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80', 1, 'Nazrul Palace', 37.7790000, -122.4150000, ST_SRID(POINT(-122.4150000, 37.7790000), 4326)),
+(2, 3, 'Little Giant 22-Foot Multi-Position Ladder', 'Type 1AA 375 lb rated multi-use ladder. Converts to A-frame, extension, staircase.', 'ladder', 'free_community', 0.00, 'pristine', 'Little Giant', 'Velocity M22', 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80', 1, 'Sigma Tower', 37.7710000, -122.4230000, ST_SRID(POINT(-122.4230000, 37.7710000), 4326)),
+(3, 2, 'Sun Joe SPX3000 Electric Pressure Washer', '2030 Max PSI 1.76 GPM with Dual Soap Tanks. Perfect for patios and house siding.', 'pressure_washer', 'daily_rate', 22.00, 'good', 'Sun Joe', 'SPX3000', 'https://images.unsplash.com/photo-1581783898377-1c85bf937427?auto=format&fit=crop&w=800&q=80', 1, 'Nazrul Palace', 37.7790000, -122.4150000, ST_SRID(POINT(-122.4150000, 37.7790000), 4326));
 
 -- Seed Active Rental with PINs
 INSERT INTO `rental_requests` (`id`, `tool_id`, `borrower_id`, `lender_id`, `status`, `start_date`, `end_date`, `total_amount`, `pickup_pin_hash`, `return_pin_hash`, `handover_confirmed_at`) VALUES

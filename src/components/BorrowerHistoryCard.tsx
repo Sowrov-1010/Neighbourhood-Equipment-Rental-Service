@@ -178,7 +178,7 @@ export const BorrowerHistoryCard: React.FC<BorrowerHistoryCardProps> = ({
               type="text"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="e.g., Uncomfortable with risk score, Tool already committed elsewhere"
+              placeholder="Enter reason for rejection"
               className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded focus:outline-none focus:ring-1 focus:ring-stone-500 text-xs"
             />
             <div className="flex gap-2 justify-end pt-1">

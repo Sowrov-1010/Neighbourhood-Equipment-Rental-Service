@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { PaymentReceivingMethod, ResidentSupportCategory } from '../types';
+import { NEIGHBORHOODS } from '../data/neighborhoods';
 import { 
   X, 
   LogIn, 
@@ -24,13 +26,7 @@ interface AuthModalProps {
   onOpenAdminAuth?: () => void;
 }
 
-const NEIGHBORHOODS = [
-  'Elmwood Heights',
-  'Oakridge North',
-  'West Elm Park',
-  'Riverdale Commons',
-  'Highland Terrace',
-];
+const PAYMENT_PROVIDERS = ['bKash', 'Nagad', 'Rocket', 'Bank Account'] as const;
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = 'login',
@@ -38,14 +34,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSuccess,
   onOpenAdminAuth,
 }) => {
-  const { login, register, setCurrentUserById } = useApp();
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  const { login, register, setCurrentUserById, requestCredentialRecovery } = useApp();
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   // Login form states
-  const [loginIdentifier, setLoginIdentifier] = useState('marcus.vance@neighborhood.org');
-  const [loginPassword, setLoginPassword] = useState('password123');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [recoveryIdentifier, setRecoveryIdentifier] = useState('');
+  const [recoveryCategory, setRecoveryCategory] = useState<ResidentSupportCategory>('Forgot password');
+  const [recoveryDetails, setRecoveryDetails] = useState('');
+  const [recoveryMessage, setRecoveryMessage] = useState('');
 
   // Register form states (unified Resident who can BOTH borrow and list tools!)
   const [regName, setRegName] = useState('');
@@ -53,9 +53,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regNeighborhood, setRegNeighborhood] = useState('Elmwood Heights');
-  const [regProvider, setRegProvider] = useState('Zelle');
-  const [regHandle, setRegHandle] = useState('');
+  const [regNeighborhood, setRegNeighborhood] = useState<string>(NEIGHBORHOODS[0]);
+  const [regPaymentMethods, setRegPaymentMethods] = useState<PaymentReceivingMethod[]>([]);
   const [agreePledge, setAgreePledge] = useState(true);
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -70,6 +69,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (onSuccess) onSuccess();
     onClose();
+  };
+
+  const handleRecoverySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setRecoveryMessage('');
+    const result = requestCredentialRecovery(recoveryIdentifier, recoveryCategory, recoveryDetails);
+    if (!result.success) {
+      setErrorMsg(result.error || 'Could not submit credential recovery request.');
+      return;
+    }
+    setRecoveryMessage('Your request has been sent to the administrators for review.');
   };
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
@@ -95,11 +106,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       name: regName,
       email: regEmail,
       password: regPassword,
-      phone: regPhone || '(555) 000-1234',
+      phone: regPhone || '',
       neighborhood: regNeighborhood,
-      role: 'user', // regular community resident (can both borrow and list tools!)
-      mobileBankingProvider: regProvider,
-      mobileBankingHandle: regHandle,
+      role: 'resident', // regular community resident (can both borrow and list tools!)
+      paymentMethods: regPaymentMethods.map(method => ({
+        ...method,
+        handle: method.handle.trim(),
+      })),
     });
 
     if (!res.success) {
@@ -166,7 +179,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {/* Mode 1: Sign In */}
-          {mode === 'login' ? (
+          {mode === 'forgot' ? (
+            <form onSubmit={handleRecoverySubmit} className="space-y-4">
+              <div className="text-sm font-bold text-stone-800">Request account credential reset</div>
+              <p className="text-xs text-stone-600">
+                Send your request to the administrators, then use Resident Support chat on the website to follow the conversation with your email address.
+              </p>
+              <input
+                type="text"
+                required
+                value={recoveryIdentifier}
+                onChange={(e) => setRecoveryIdentifier(e.target.value)}
+                placeholder="Email or registered phone"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
+              />
+              <select
+                value={recoveryCategory}
+                onChange={e => setRecoveryCategory(e.target.value as ResidentSupportCategory)}
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs"
+              >
+                <option value="Forgot password">Forgot password</option>
+                <option value="Forgot security PIN">Forgot security PIN</option>
+                <option value="Other">Other question or issue</option>
+              </select>
+              <textarea
+                rows={3}
+                required={recoveryCategory === 'Other'}
+                value={recoveryDetails}
+                onChange={e => setRecoveryDetails(e.target.value)}
+                placeholder={recoveryCategory === 'Other' ? 'Describe your question or issue' : 'Additional details (optional)'}
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs"
+              />
+              {recoveryMessage && (
+                <p className="text-xs text-emerald-700">
+                  {recoveryMessage} Close this form and open Resident Support chat; enter your account email to follow the conversation.
+                </p>
+              )}
+              <button type="submit" className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-lg">
+                Send request to administrator
+              </button>
+              <button type="button" onClick={() => { setMode('login'); setErrorMsg(''); }} className="w-full text-xs text-stone-600 underline">
+                Return to sign in
+              </button>
+            </form>
+          ) : mode === 'login' ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-stone-700 uppercase tracking-wide block mb-1">
@@ -177,7 +233,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                   value={loginIdentifier}
                   onChange={(e) => setLoginIdentifier(e.target.value)}
-                  placeholder="e.g. marcus.vance@neighborhood.org"
+                  placeholder="Enter email or registered phone"
                   className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
                 />
               </div>
@@ -187,7 +243,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label className="text-xs font-bold text-stone-700 uppercase tracking-wide">
                     Password
                   </label>
-                  <span className="text-[11px] text-stone-500 font-mono">Demo: &quot;password123&quot;</span>
                 </div>
                 <div className="relative">
                   <input
@@ -214,6 +269,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <LogIn className="w-4 h-4" />
                 <span>Sign In as Community Member</span>
               </button>
+              <div className="text-right -mt-2">
+                <button
+                  type="button"
+                  onClick={() => { setMode('forgot'); setErrorMsg(''); setRecoveryMessage(''); }}
+                  className="text-xs font-semibold text-stone-600 underline hover:text-stone-900"
+                >
+                  Forgot password or security PIN?
+                </button>
+              </div>
 
               {/* 1-Click Demo Profiles for Residents */}
               <div className="pt-4 border-t border-stone-100 space-y-2">
@@ -226,7 +290,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={() => handleQuickDemo('u-lender')}
                     className="p-2 border border-stone-200 rounded-lg bg-stone-50 hover:bg-stone-100 text-left transition-colors"
                   >
-                    <div className="font-bold text-stone-900 truncate">Marcus Vance</div>
+                    <div className="font-bold text-stone-900 truncate">Rahim Uddin</div>
                     <div className="text-[10px] text-stone-500 truncate">Lists &amp; Borrows</div>
                   </button>
                   <button
@@ -234,7 +298,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={() => handleQuickDemo('u-borrower-good')}
                     className="p-2 border border-stone-200 rounded-lg bg-stone-50 hover:bg-stone-100 text-left transition-colors"
                   >
-                    <div className="font-bold text-stone-900 truncate">Sarah Jenkins</div>
+                    <div className="font-bold text-stone-900 truncate">Nusrat Jahan</div>
                     <div className="text-[10px] text-stone-500 truncate">Reliable (4.95 ★)</div>
                   </button>
                   <button
@@ -242,7 +306,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={() => handleQuickDemo('u-borrower-risk')}
                     className="p-2 border border-red-200 rounded-lg bg-red-50/50 hover:bg-red-50 text-left transition-colors"
                   >
-                    <div className="font-bold text-red-900 truncate">John Doe</div>
+                    <div className="font-bold text-red-900 truncate">Tanvir Ahmed</div>
                     <div className="text-[10px] text-red-700 truncate">Red Badge (2.3 ★)</div>
                   </button>
                 </div>
@@ -296,7 +360,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="e.g. David Ross"
+                    placeholder="Enter full name"
                     className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
                   />
                 </div>
@@ -310,7 +374,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="e.g. (555) 432-8890"
+                    placeholder="Enter phone number"
                     className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
                   />
                 </div>
@@ -326,7 +390,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="e.g. david.ross@neighborhood.org"
+                    placeholder="Enter email address"
                     className="w-full px-3 py-2 bg-white border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
                   />
                 </div>
@@ -347,28 +411,72 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* Optional Mobile Banking Handle for receiving rental fees */}
+              {/* Optional payment methods for receiving rental fees */}
               <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2 text-xs">
                 <div className="font-bold text-stone-800 uppercase flex items-center gap-1.5">
                   <CreditCard className="w-3.5 h-3.5 text-stone-600" />
-                  <span>Optional: Payment Receiving Handle (When Lending Tools)</span>
+                  <span>Optional: Payment Receiving Methods (When Lending Tools)</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={regProvider}
-                    onChange={(e) => setRegProvider(e.target.value)}
-                    placeholder="Provider (e.g. Zelle / Venmo)"
-                    className="px-2.5 py-1.5 bg-white border border-stone-300 rounded text-xs"
-                  />
-                  <input
-                    type="text"
-                    value={regHandle}
-                    onChange={(e) => setRegHandle(e.target.value)}
-                    placeholder="Handle (e.g. @tag or email)"
-                    className="px-2.5 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono"
-                  />
-                </div>
+                {regPaymentMethods.map((method, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <select
+                      value={method.provider}
+                      onChange={(e) => {
+                        const provider = PAYMENT_PROVIDERS.find(option => option === e.target.value);
+                        if (!provider || regPaymentMethods.some((item, itemIndex) => itemIndex !== index && item.provider === provider)) return;
+                        setRegPaymentMethods(methods => methods.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, provider } : item
+                        ));
+                      }}
+                      className="min-w-0 flex-1 px-2.5 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    >
+                      {PAYMENT_PROVIDERS.map(provider => (
+                        <option
+                          key={provider}
+                          value={provider}
+                          disabled={regPaymentMethods.some((item, itemIndex) => itemIndex !== index && item.provider === provider)}
+                        >
+                          {provider}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={method.handle}
+                      onChange={(e) => setRegPaymentMethods(methods => methods.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, handle: e.target.value } : item
+                      ))}
+                      placeholder={method.provider === 'Bank Account' ? 'Account number' : 'Account number or handle'}
+                      className="min-w-0 flex-1 px-2.5 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRegPaymentMethods(methods => methods.filter((_, itemIndex) => itemIndex !== index))}
+                      aria-label={`Remove ${method.provider} payment method`}
+                      className="px-2 py-1 text-stone-500 hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {regPaymentMethods.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setRegPaymentMethods(methods => {
+                      const provider = PAYMENT_PROVIDERS.find(option => !methods.some(method => method.provider === option));
+                      return provider ? [...methods, { provider, handle: '' }] : methods;
+                    })}
+                    className="px-2.5 py-1.5 border border-stone-300 rounded text-xs font-semibold text-stone-700 hover:bg-white"
+                  >
+                    Add payment method
+                  </button>
+                )}
+                {regPaymentMethods.length === 0 && (
+                  <p className="text-[11px] text-stone-500">
+                    Add one or more ways for neighbors to pay you.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

@@ -267,7 +267,7 @@ export const AdminPortal: React.FC = () => {
                     type="text"
                     value={directiveText}
                     onChange={(e) => setDirectiveText(e.target.value)}
-                    placeholder="e.g. Return item within 24 hours or settle fee"
+                    placeholder="Enter administrative order"
                     className="flex-1 px-3 py-1.5 bg-white border border-stone-300 rounded text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
                   />
                   <button
@@ -338,7 +338,7 @@ export const AdminPortal: React.FC = () => {
                       type="text"
                       value={blacklistReason}
                       onChange={(e) => setBlacklistReason(e.target.value)}
-                      placeholder="Specify reason for blacklisting..."
+                      placeholder="Enter reason for blacklisting"
                       className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
                     />
                     <button

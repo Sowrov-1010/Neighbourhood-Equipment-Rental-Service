@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { RentalStatus, Asset, UserProfile, DisputeTicket } from '../types';
+import { RentalStatus, Asset, UserProfile, DisputeTicket, ResidentStanding, PlatformRole } from '../types';
 import { 
   ShieldAlert, 
   Gavel, 
@@ -36,7 +36,8 @@ import {
   MapPin,
   KeyRound,
   Crown,
-  Lock
+  Lock,
+  Mail
 } from 'lucide-react';
 import { LaravelDatabaseHubModal } from './LaravelDatabaseHubModal';
 
@@ -65,10 +66,15 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
     forceCloudResync,
     adminSecurityCode,
     resetAdminSecurityCode,
-    resetUserSecurityPin
+    updateUserStanding,
+    updateUserRole,
+    adminRemoveResident,
+    resetResidentCredentials,
+    resolveResidentSupportRequest,
+    sendAdminSupportMessage
   } = useApp();
 
-  const [activeModule, setActiveModule] = useState<'overview' | 'lifecycle' | 'disputes' | 'users' | 'catalog' | 'database'>('overview');
+  const [activeModule, setActiveModule] = useState<'overview' | 'lifecycle' | 'disputes' | 'support' | 'users' | 'catalog' | 'database'>('overview');
   const [selectedTicketId, setSelectedTicketId] = useState<string>(disputes[0]?.id || '');
   const [directiveInput, setDirectiveInput] = useState('Order: Return equipment to owner address within 24 hours.');
   const [fineInput, setFineInput] = useState<number>(35);
@@ -77,7 +83,12 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
   // Security Code & PIN Governance states
   const [selectedUserForPinReset, setSelectedUserForPinReset] = useState<UserProfile | null>(null);
   const [targetUserNewPin, setTargetUserNewPin] = useState('');
+  const [targetUserNewPassword, setTargetUserNewPassword] = useState('');
   const [userPinResetMsg, setUserPinResetMsg] = useState('');
+  const [supportResolutionNotes, setSupportResolutionNotes] = useState<Record<string, string>>({});
+  const [supportReplyDrafts, setSupportReplyDrafts] = useState<Record<string, string>>({});
+  const [selectedSupportRequestId, setSelectedSupportRequestId] = useState<string | null>(null);
+  const [credentialResetMessage, setCredentialResetMessage] = useState('');
   const [showAdminCodeModal, setShowAdminCodeModal] = useState(false);
   const [masterNewAdminCode, setMasterNewAdminCode] = useState('');
   const [masterAdminCodeStatus, setMasterAdminCodeStatus] = useState('');
@@ -110,6 +121,11 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
   const activeRentalsCount = rentalRequests.filter(r => r.status === 'active').length;
   const overdueCount = rentalRequests.filter(r => r.status === 'overdue').length;
   const blacklistedCount = users.filter(u => u.isBlacklisted).length;
+  const supportRequests = users.flatMap(user =>
+    (user.supportRequests || [])
+      .map(request => ({ user, request }))
+  );
+  const openSupportRequests = supportRequests.filter(({ request }) => request.status === 'open');
   const totalFinesLevied = users.reduce((acc, u) => acc + (u.adminFinePending || 0), 0);
 
   return (
@@ -230,6 +246,23 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
               <span className="text-[10px] font-mono bg-stone-800 px-1.5 py-0.5 rounded text-stone-300">
                 {users.length}
               </span>
+            </button>
+
+            <button
+              onClick={() => setActiveModule('support')}
+              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                activeModule === 'support' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Mail className="w-4 h-4" />
+                <span>Resident Support</span>
+              </div>
+              {openSupportRequests.length > 0 && (
+                <span className="text-[10px] font-mono bg-amber-900/60 text-amber-200 px-1.5 py-0.5 rounded font-bold">
+                  {openSupportRequests.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -624,6 +657,130 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
             </div>
           )}
 
+          {/* Resident Support Queue */}
+          {activeModule === 'support' && (
+            <div className="space-y-4">
+              <div className="pb-3 border-b border-stone-800">
+                <h2 className="text-xl font-bold tracking-tight text-white">Resident Support Requests</h2>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  Review account recovery requests and other resident questions. Resolve requests with a response; reset credentials from a recovery request when needed.
+                </p>
+              </div>
+
+              {supportRequests.length === 0 ? (
+                <div className="p-6 bg-stone-900 border border-stone-800 rounded-xl text-sm text-stone-400 text-center">
+                  There are no resident support conversations.
+                </div>
+              ) : (
+                supportRequests.map(({ user, request }) => (
+                  <section key={`${user.id}-${request.id}`} className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-bold text-white">{request.category}</div>
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                            request.status === 'open' ? 'bg-amber-900/60 text-amber-200' : 'bg-emerald-900/60 text-emerald-200'
+                          }`}>
+                            {request.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-stone-400">{user.name} · {user.email}</div>
+                      </div>
+                      <time className="text-[10px] text-stone-500 font-mono">
+                        {new Date(request.requestedAt).toLocaleString()}
+                      </time>
+                    </div>
+                    <p className="text-xs text-stone-300 whitespace-pre-wrap">{request.message}</p>
+                    <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-stone-800 bg-stone-950 p-3">
+                      {(request.messages || []).length === 0 ? (
+                        <p className="text-[11px] text-stone-500">No chat messages yet.</p>
+                      ) : request.messages?.map(message => (
+                        <div key={message.id} className={`max-w-[90%] rounded-lg p-2 text-xs ${
+                          message.sender === 'admin' ? 'ml-auto bg-amber-950/60 text-amber-100' : 'mr-auto bg-stone-800 text-stone-200'
+                        }`}>
+                          <div className="mb-1 text-[10px] font-bold opacity-70">{message.senderName}</div>
+                          <p className="whitespace-pre-wrap">{message.message}</p>
+                          <time className="mt-1 block text-right text-[9px] opacity-60">{new Date(message.createdAt).toLocaleString()}</time>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        rows={2}
+                        value={supportReplyDrafts[request.id] || ''}
+                        onChange={event => setSupportReplyDrafts(drafts => ({ ...drafts, [request.id]: event.target.value }))}
+                        placeholder="Write a message in the resident's live chat"
+                        className="min-w-0 flex-1 px-3 py-2 bg-stone-950 border border-stone-700 rounded text-xs text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const result = sendAdminSupportMessage(user.id, request.id, supportReplyDrafts[request.id] || '');
+                          if (!result.success) {
+                            window.alert(result.error);
+                            return;
+                          }
+                          setSupportReplyDrafts(drafts => ({ ...drafts, [request.id]: '' }));
+                        }}
+                        disabled={!(supportReplyDrafts[request.id] || '').trim()}
+                        className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded text-xs font-bold disabled:opacity-50"
+                      >
+                        Send
+                      </button>
+                    </div>
+                    {request.status === 'open' && (
+                      <textarea
+                        rows={2}
+                        value={supportResolutionNotes[request.id] || ''}
+                        onChange={event => setSupportResolutionNotes(notes => ({ ...notes, [request.id]: event.target.value }))}
+                        placeholder="Resolution note required to close this request"
+                        className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded text-xs text-white"
+                      />
+                    )}
+                    <div className="flex justify-end gap-2">
+                      {request.status === 'open' && (request.category === 'Forgot password' || request.category === 'Forgot security PIN') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUserForPinReset(user);
+                            setSelectedSupportRequestId(request.id);
+                            setTargetUserNewPin('');
+                            setTargetUserNewPassword('');
+                            setUserPinResetMsg('');
+                            setCredentialResetMessage('');
+                          }}
+                          className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded text-xs font-semibold border border-stone-700"
+                        >
+                          Reset credentials
+                        </button>
+                      )}
+                      {request.status === 'open' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const result = resolveResidentSupportRequest(user.id, request.id, supportResolutionNotes[request.id] || '');
+                          if (!result.success) {
+                            window.alert(result.error);
+                            return;
+                          }
+                          setSupportResolutionNotes(notes => {
+                            const nextNotes = { ...notes };
+                            delete nextNotes[request.id];
+                            return nextNotes;
+                          });
+                        }}
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold"
+                      >
+                        Resolve request
+                      </button>
+                      )}
+                    </div>
+                  </section>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Module 4: Resident Standing & Blacklist Control */}
           {activeModule === 'users' && (
             <div className="space-y-4">
@@ -681,6 +838,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                       <th className="p-3">Rating</th>
                       <th className="p-3">Borrows / Lent</th>
                       <th className="p-3">Security PIN</th>
+                      <th className="p-3">Role</th>
                       <th className="p-3">Standing</th>
                       <th className="p-3 text-right">Actions</th>
                     </tr>
@@ -696,6 +854,11 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                             )}
                           </div>
                           <div className="text-[11px] text-stone-400">{u.email}</div>
+                          {u.supportRequests?.some(request => request.status === 'open') && (
+                            <div className="mt-1 text-[9px] uppercase font-bold text-amber-300">
+                              Support request open
+                            </div>
+                          )}
                         </td>
                         <td className="p-3 text-stone-300">{u.neighborhood}</td>
                         <td className="p-3 font-bold text-amber-400">{u.rating.toFixed(1)} ★</td>
@@ -706,34 +869,77 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                           </span>
                         </td>
                         <td className="p-3">
+                          {currentUser.email.toLowerCase() === 'jahid_hassan1010@uits.edu.bd' &&
+                            u.email.toLowerCase() !== 'jahid_hassan1010@uits.edu.bd' &&
+                            u.role !== 'assistant' ? (
+                              <select
+                                value={u.role}
+                                onChange={(e) => {
+                                  const role = e.target.value as PlatformRole;
+                                  if (role === 'assistant') return;
+                                  const result = updateUserRole(u.id, role);
+                                  if (!result.success) window.alert(result.error);
+                                }}
+                                aria-label={`Change role for ${u.name}`}
+                                className="px-2 py-1 rounded border border-stone-700 bg-stone-950 text-stone-200 text-[10px] font-bold"
+                              >
+                                <option value="admin">ADMIN</option>
+                                <option value="resident">RESIDENT</option>
+                                <option value="moderator">MODERATOR</option>
+                              </select>
+                            ) : (
+                              <span className="px-2 py-1 rounded border border-stone-800 bg-stone-950 text-stone-300 text-[10px] font-bold">
+                                {u.role === 'assistant' ? 'ASSISTANT' : u.role.toUpperCase()}
+                              </span>
+                            )}
+                        </td>
+                        <td className="p-3">
                           {u.isBlacklisted ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-300 border border-red-800">
                               BLACKLISTED
                             </span>
-                          ) : u.rating < 3.0 ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
-                              RED BADGE
-                            </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                              ACTIVE
-                            </span>
+                            <select
+                              value={u.standing || (u.rating < 3.0 ? 'Red Badge' : 'Active')}
+                              onChange={(e) => updateUserStanding(u.id, e.target.value as ResidentStanding)}
+                              aria-label={`Update standing for ${u.name}`}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold border bg-stone-950 ${
+                                (u.standing || (u.rating < 3.0 ? 'Red Badge' : 'Active')) === 'Red Badge'
+                                  ? 'text-amber-300 border-amber-800'
+                                  : (u.standing || 'Active') === 'Suspicious'
+                                    ? 'text-red-300 border-red-800'
+                                    : (u.standing || 'Active') === 'Monitoring'
+                                      ? 'text-blue-300 border-blue-800'
+                                      : (u.standing || 'Active') === 'Improving'
+                                        ? 'text-violet-300 border-violet-800'
+                                        : 'text-emerald-300 border-emerald-800'
+                              }`}
+                            >
+                              {(['Active', 'Red Badge', 'Monitoring', 'Suspicious', 'Improving'] as const).map(standing => (
+                                <option key={standing} value={standing}>{standing.toUpperCase()}</option>
+                              ))}
+                            </select>
                           )}
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {u.role === 'resident' && (
                             <button
                               onClick={() => {
                                 setSelectedUserForPinReset(u);
+                                setSelectedSupportRequestId(null);
                                 setTargetUserNewPin('');
+                                setTargetUserNewPassword('');
                                 setUserPinResetMsg('');
+                                setCredentialResetMessage('');
                               }}
                               className="px-2 py-1 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded text-[11px] font-semibold border border-stone-700 flex items-center gap-1"
                               title="Reset resident's security PIN"
                             >
                               <KeyRound className="w-3 h-3 text-amber-400" />
-                              <span>Reset PIN</span>
+                              <span>Reset Credentials</span>
                             </button>
+                            )}
 
                             {u.isBlacklisted ? (
                               <button
@@ -750,6 +956,22 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                                 Blacklist
                               </button>
                             )}
+                            {u.role === 'resident' && (
+                              <button
+                                onClick={() => {
+                                  if (!window.confirm(`Remove resident ${u.name}? Their account and listings will be deleted. Rental history will be retained.`)) return;
+                                  const result = adminRemoveResident(u.id);
+                                  if (!result.success) window.alert(result.error);
+                                }}
+                                className="px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded text-[11px] font-semibold border border-stone-700"
+                                title="Remove resident account"
+                              >
+                                <span className="flex items-center gap-1">
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Remove</span>
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -757,76 +979,6 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                   </tbody>
                 </table>
               </div>
-
-              {/* Modal: Reset Resident PIN by Admin */}
-              {selectedUserForPinReset && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs">
-                  <div className="bg-stone-900 border border-stone-700 rounded-xl p-5 max-w-sm w-full space-y-4">
-                    <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-                      <div className="flex items-center gap-2">
-                        <KeyRound className="w-4 h-4 text-amber-400" />
-                        <h4 className="text-sm font-bold text-white">Reset Resident Security PIN</h4>
-                      </div>
-                      <button onClick={() => setSelectedUserForPinReset(null)} className="text-stone-400 hover:text-white">
-                        ✕
-                      </button>
-                    </div>
-
-                    <div className="text-xs text-stone-300">
-                      Resetting PIN for <strong className="text-white">{selectedUserForPinReset.name}</strong> ({selectedUserForPinReset.email})
-                    </div>
-
-                    {userPinResetMsg && (
-                      <div className="p-2.5 bg-stone-950 border border-amber-500/40 rounded text-xs text-amber-300">
-                        {userPinResetMsg}
-                      </div>
-                    )}
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-stone-400 block">New 4-digit Security PIN</label>
-                      <input
-                        type="text"
-                        maxLength={8}
-                        value={targetUserNewPin}
-                        onChange={(e) => setTargetUserNewPin(e.target.value)}
-                        placeholder="e.g. 5566"
-                        className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs font-mono tracking-widest text-white"
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedUserForPinReset(null)}
-                        className="px-3 py-1.5 text-xs text-stone-400 hover:text-white"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (targetUserNewPin.trim().length < 4) {
-                            setUserPinResetMsg('PIN must be at least 4 digits.');
-                            return;
-                          }
-                          const res = resetUserSecurityPin(selectedUserForPinReset.id, targetUserNewPin.trim(), 'jahid_hassan1010@uits.edu.bd');
-                          if (res.success) {
-                            setUserPinResetMsg(`PIN for ${selectedUserForPinReset.name} reset to ${targetUserNewPin.trim()} successfully!`);
-                            setTimeout(() => {
-                              setSelectedUserForPinReset(null);
-                            }, 1800);
-                          } else {
-                            setUserPinResetMsg(res.error || 'Failed to reset PIN.');
-                          }
-                        }}
-                        className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold rounded"
-                      >
-                        Save New PIN
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Modal: Reset Master Admin Security Code */}
               {showAdminCodeModal && (
@@ -865,7 +1017,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                         maxLength={12}
                         value={masterNewAdminCode}
                         onChange={(e) => setMasterNewAdminCode(e.target.value)}
-                        placeholder="e.g. 2580"
+                        placeholder="Enter new security code"
                         className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs font-mono tracking-widest text-white"
                       />
                       <p className="text-[10px] text-stone-400">
@@ -1335,6 +1487,133 @@ CREATE INDEX idx_tools_postgis ON tools USING GIST (location_geom);
           )}
         </main>
       </div>
+
+      {selectedUserForPinReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs">
+          <div className="bg-stone-900 border border-stone-700 rounded-xl p-5 max-w-sm w-full space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                <h4 className="text-sm font-bold text-white">Reset Resident Credentials</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUserForPinReset(null);
+                  setSelectedSupportRequestId(null);
+                  setCredentialResetMessage('');
+                }}
+                className="text-stone-400 hover:text-white"
+                aria-label="Close credential reset"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs text-stone-300">
+              Resetting credentials for <strong className="text-white">{selectedUserForPinReset.name}</strong> ({selectedUserForPinReset.email})
+            </div>
+            {selectedUserForPinReset.supportRequests?.some(request => request.status === 'open') && (
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-200">
+                Open support request: {selectedUserForPinReset.supportRequests
+                  .filter(request => request.status === 'open')
+                  .map(request => request.category)
+                  .join(', ')}
+              </div>
+            )}
+            {userPinResetMsg && (
+              <div className="p-2.5 bg-stone-950 border border-amber-500/40 rounded text-xs text-amber-300">
+                {userPinResetMsg}
+              </div>
+            )}
+
+            {selectedSupportRequestId && (
+              <div className="space-y-1">
+                <label className="text-[11px] text-stone-400 block">Message to include in the resident's support chat (optional)</label>
+                <textarea
+                  rows={3}
+                  value={credentialResetMessage}
+                  onChange={event => setCredentialResetMessage(event.target.value)}
+                  placeholder="Write a message about the credential reset"
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs text-white"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-[11px] text-stone-400 block">New Password (leave blank to keep unchanged)</label>
+              <input
+                type="password"
+                minLength={6}
+                value={targetUserNewPassword}
+                onChange={event => setTargetUserNewPassword(event.target.value)}
+                placeholder="Enter new password"
+                className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs text-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-stone-400 block">New Security PIN (4-8 digits; leave blank to keep unchanged)</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]{4,8}"
+                maxLength={8}
+                value={targetUserNewPin}
+                onChange={event => setTargetUserNewPin(event.target.value.replace(/\D/g, ''))}
+                placeholder="Enter new PIN"
+                className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs font-mono tracking-widest text-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUserForPinReset(null);
+                  setSelectedSupportRequestId(null);
+                  setCredentialResetMessage('');
+                }}
+                className="px-3 py-1.5 text-xs text-stone-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const password = targetUserNewPassword.trim();
+                  const securityPin = targetUserNewPin.trim();
+                  if (!password && !securityPin) {
+                    setUserPinResetMsg('Enter a new password, security PIN, or both.');
+                    return;
+                  }
+                  const result = resetResidentCredentials(selectedUserForPinReset.id, {
+                    ...(password ? { password } : {}),
+                    ...(securityPin ? { securityPin } : {}),
+                    ...(selectedSupportRequestId ? { supportRequestId: selectedSupportRequestId } : {}),
+                    ...(credentialResetMessage.trim() ? { message: credentialResetMessage.trim() } : {}),
+                  });
+                  if (result.success) {
+                    setUserPinResetMsg(`Credentials for ${selectedUserForPinReset.name} were reset successfully.`);
+                    window.setTimeout(() => {
+                      setSelectedUserForPinReset(null);
+                      setSelectedSupportRequestId(null);
+                      setTargetUserNewPassword('');
+                      setTargetUserNewPin('');
+                      setCredentialResetMessage('');
+                      setUserPinResetMsg('');
+                    }, 1800);
+                  } else {
+                    setUserPinResetMsg(result.error || 'Failed to reset credentials.');
+                  }
+                }}
+                className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold rounded"
+              >
+                Save Credentials
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDatabaseHub && (
         <LaravelDatabaseHubModal onClose={() => setShowDatabaseHub(false)} />
