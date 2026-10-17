@@ -28,7 +28,15 @@ import {
   Copy,
   Terminal,
   Compass,
-  Check
+  Check,
+  Server,
+  FileCode,
+  Radio,
+  ShieldCheck,
+  MapPin,
+  KeyRound,
+  Crown,
+  Lock
 } from 'lucide-react';
 import { LaravelDatabaseHubModal } from './LaravelDatabaseHubModal';
 
@@ -52,7 +60,12 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
     adminForceTransitionRequest,
     adminDeleteAsset,
     toggleAssetAvailability,
-    logout
+    logout,
+    cloudSyncInfo,
+    forceCloudResync,
+    adminSecurityCode,
+    resetAdminSecurityCode,
+    resetUserSecurityPin
   } = useApp();
 
   const [activeModule, setActiveModule] = useState<'overview' | 'lifecycle' | 'disputes' | 'users' | 'catalog' | 'database'>('overview');
@@ -60,6 +73,14 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
   const [directiveInput, setDirectiveInput] = useState('Order: Return equipment to owner address within 24 hours.');
   const [fineInput, setFineInput] = useState<number>(35);
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Security Code & PIN Governance states
+  const [selectedUserForPinReset, setSelectedUserForPinReset] = useState<UserProfile | null>(null);
+  const [targetUserNewPin, setTargetUserNewPin] = useState('');
+  const [userPinResetMsg, setUserPinResetMsg] = useState('');
+  const [showAdminCodeModal, setShowAdminCodeModal] = useState(false);
+  const [masterNewAdminCode, setMasterNewAdminCode] = useState('');
+  const [masterAdminCodeStatus, setMasterAdminCodeStatus] = useState('');
 
   // Database & Spatial Module State (Admin Only)
   const [dbDialect, setDbDialect] = useState<'mysql' | 'postgres'>('mysql');
@@ -606,13 +627,49 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
           {/* Module 4: Resident Standing & Blacklist Control */}
           {activeModule === 'users' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-stone-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-800">
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight text-white">Resident Standing &amp; Compliance Directory</h2>
+                  <h2 className="text-xl font-bold tracking-tight text-white">Resident Standing &amp; Security Governance</h2>
                   <p className="text-xs text-stone-400 mt-0.5">
-                    Full registry of neighborhood accounts. Blacklisting locks borrowing capabilities and hides their active catalog listings.
+                    Neighborhood resident registry, access security PIN reset authority, and disciplinary compliance.
                   </p>
                 </div>
+
+                <button
+                  onClick={() => setShowAdminCodeModal(true)}
+                  className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto shadow-xs"
+                >
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Master Security Code: {adminSecurityCode}</span>
+                </button>
+              </div>
+
+              {/* Master Admin Authority Banner */}
+              <div className="p-4 bg-stone-900 border border-amber-500/30 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      <span>Super Admin Security Clearances</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
+                        Master: jahid_hassan1010@uits.edu.bd
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-stone-400 mt-0.5">
+                      Main Administrator has master clearance to reset the administrative login/account opening security code, and reset any resident's private security PIN.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowAdminCodeModal(true)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-lg text-xs font-bold transition-colors shrink-0 shadow-xs flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset Admin Security Code</span>
+                </button>
               </div>
 
               <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
@@ -623,7 +680,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                       <th className="p-3">Neighborhood</th>
                       <th className="p-3">Rating</th>
                       <th className="p-3">Borrows / Lent</th>
-                      <th className="p-3">Flags (Late / Damage)</th>
+                      <th className="p-3">Security PIN</th>
                       <th className="p-3">Standing</th>
                       <th className="p-3 text-right">Actions</th>
                     </tr>
@@ -632,14 +689,21 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                     {users.map(u => (
                       <tr key={u.id} className="hover:bg-stone-850">
                         <td className="p-3">
-                          <div className="font-bold text-white">{u.name}</div>
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span>{u.name}</span>
+                            {u.email === 'jahid_hassan1010@uits.edu.bd' && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-500 text-stone-950 font-bold">MASTER</span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-stone-400">{u.email}</div>
                         </td>
                         <td className="p-3 text-stone-300">{u.neighborhood}</td>
                         <td className="p-3 font-bold text-amber-400">{u.rating.toFixed(1)} ★</td>
                         <td className="p-3 text-stone-300">{u.totalBorrowed} / {u.totalLent}</td>
                         <td className="p-3 text-stone-400">
-                          Late: {u.flags.lateReturn} &middot; Damaged: {u.flags.equipmentDamage}
+                          <span className="bg-stone-950 px-2 py-0.5 rounded border border-stone-800 text-stone-300">
+                            {u.securityPin ? `${u.securityPin}` : '••••'}
+                          </span>
                         </td>
                         <td className="p-3">
                           {u.isBlacklisted ? (
@@ -657,27 +721,193 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                           )}
                         </td>
                         <td className="p-3 text-right">
-                          {u.isBlacklisted ? (
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => restoreUserStatus(u.id)}
-                              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[11px] font-semibold"
+                              onClick={() => {
+                                setSelectedUserForPinReset(u);
+                                setTargetUserNewPin('');
+                                setUserPinResetMsg('');
+                              }}
+                              className="px-2 py-1 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded text-[11px] font-semibold border border-stone-700 flex items-center gap-1"
+                              title="Reset resident's security PIN"
                             >
-                              Lift Blacklist
+                              <KeyRound className="w-3 h-3 text-amber-400" />
+                              <span>Reset PIN</span>
                             </button>
-                          ) : (
-                            <button
-                              onClick={() => blacklistUser(u.id, 'Administrative intervention')}
-                              className="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded text-[11px] font-semibold border border-red-800"
-                            >
-                              Blacklist Account
-                            </button>
-                          )}
+
+                            {u.isBlacklisted ? (
+                              <button
+                                onClick={() => restoreUserStatus(u.id)}
+                                className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[11px] font-semibold"
+                              >
+                                Lift
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => blacklistUser(u.id, 'Administrative intervention')}
+                                className="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded text-[11px] font-semibold border border-red-800"
+                              >
+                                Blacklist
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* Modal: Reset Resident PIN by Admin */}
+              {selectedUserForPinReset && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs">
+                  <div className="bg-stone-900 border border-stone-700 rounded-xl p-5 max-w-sm w-full space-y-4">
+                    <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="w-4 h-4 text-amber-400" />
+                        <h4 className="text-sm font-bold text-white">Reset Resident Security PIN</h4>
+                      </div>
+                      <button onClick={() => setSelectedUserForPinReset(null)} className="text-stone-400 hover:text-white">
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-stone-300">
+                      Resetting PIN for <strong className="text-white">{selectedUserForPinReset.name}</strong> ({selectedUserForPinReset.email})
+                    </div>
+
+                    {userPinResetMsg && (
+                      <div className="p-2.5 bg-stone-950 border border-amber-500/40 rounded text-xs text-amber-300">
+                        {userPinResetMsg}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-stone-400 block">New 4-digit Security PIN</label>
+                      <input
+                        type="text"
+                        maxLength={8}
+                        value={targetUserNewPin}
+                        onChange={(e) => setTargetUserNewPin(e.target.value)}
+                        placeholder="e.g. 5566"
+                        className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs font-mono tracking-widest text-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserForPinReset(null)}
+                        className="px-3 py-1.5 text-xs text-stone-400 hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (targetUserNewPin.trim().length < 4) {
+                            setUserPinResetMsg('PIN must be at least 4 digits.');
+                            return;
+                          }
+                          const res = resetUserSecurityPin(selectedUserForPinReset.id, targetUserNewPin.trim(), 'jahid_hassan1010@uits.edu.bd');
+                          if (res.success) {
+                            setUserPinResetMsg(`PIN for ${selectedUserForPinReset.name} reset to ${targetUserNewPin.trim()} successfully!`);
+                            setTimeout(() => {
+                              setSelectedUserForPinReset(null);
+                            }, 1800);
+                          } else {
+                            setUserPinResetMsg(res.error || 'Failed to reset PIN.');
+                          }
+                        }}
+                        className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold rounded"
+                      >
+                        Save New PIN
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal: Reset Master Admin Security Code */}
+              {showAdminCodeModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs">
+                  <div className="bg-stone-900 border border-stone-700 rounded-xl p-6 max-w-md w-full space-y-4">
+                    <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Crown className="w-5 h-5 text-amber-400" />
+                        <div>
+                          <h4 className="text-sm font-bold text-white">Reset Admin Security Authorization Code</h4>
+                          <span className="text-[10px] font-mono text-stone-400">Master Authority: jahid_hassan1010@uits.edu.bd</span>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowAdminCodeModal(false)} className="text-stone-400 hover:text-white">
+                        ✕
+                      </button>
+                    </div>
+
+                    {masterAdminCodeStatus && (
+                      <div className="p-2.5 bg-stone-950 border border-amber-500/40 rounded text-xs text-amber-300">
+                        {masterAdminCodeStatus}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-stone-300 block">Current Active Security Code</label>
+                      <div className="p-2.5 bg-stone-950 border border-stone-800 rounded font-mono text-amber-400 font-bold text-sm">
+                        {adminSecurityCode}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-stone-300 block">Enter New Administrative Security Code</label>
+                      <input
+                        type="text"
+                        maxLength={12}
+                        value={masterNewAdminCode}
+                        onChange={(e) => setMasterNewAdminCode(e.target.value)}
+                        placeholder="e.g. 2580"
+                        className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded text-xs font-mono tracking-widest text-white"
+                      />
+                      <p className="text-[10px] text-stone-400">
+                        This code will be required for administrative login and new admin account registrations.
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminCodeModal(false)}
+                        className="px-3 py-1.5 text-xs text-stone-400 hover:text-white"
+                      >
+                        Close
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (masterNewAdminCode.trim().length < 4) {
+                            setMasterAdminCodeStatus('Code must be at least 4 alphanumeric characters.');
+                            return;
+                          }
+                          const res = resetAdminSecurityCode('jahid_hassan1010@uits.edu.bd', masterNewAdminCode.trim());
+                          if (res.success) {
+                            setMasterAdminCodeStatus(`Admin security code successfully reset to "${masterNewAdminCode.trim()}".`);
+                            setTimeout(() => {
+                              setShowAdminCodeModal(false);
+                              setMasterAdminCodeStatus('');
+                              setMasterNewAdminCode('');
+                            }, 1800);
+                          } else {
+                            setMasterAdminCodeStatus(res.error || 'Failed to reset code.');
+                          }
+                        }}
+                        className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold rounded"
+                      >
+                        Confirm &amp; Update Code
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -770,61 +1000,162 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                 </div>
               </div>
 
-              {/* Architecture Highlights Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">Spatial Engine</span>
-                    <Compass className="w-4 h-4 text-stone-500" />
+              {/* Live Cloud Persistence Status Card */}
+              <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Database className="w-5 h-5" />
                   </div>
-                  <div className="text-sm font-bold text-white">MySQL 8.0 / PostGIS</div>
-                  <div className="text-xs text-stone-400 font-mono">
-                    POINT + SPATIAL INDEX (SRID 4326) with ST_Distance_Sphere proximity calculations.
-                  </div>
-                  <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-stone-800">
-                    {assets.length} equipment items indexed
-                  </div>
-                </div>
-
-                <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">ORM &amp; FSM State</span>
-                    <Layers className="w-4 h-4 text-stone-500" />
-                  </div>
-                  <div className="text-sm font-bold text-white">Eloquent ORM 11.x</div>
-                  <div className="text-xs text-stone-400 font-mono">
-                    Deterministic 8-state FSM with SHA-256 PIN handover security and account-isolated queries.
-                  </div>
-                  <div className="text-[11px] text-amber-400 font-mono pt-1 border-t border-stone-800">
-                    {rentalRequests.length} active transactions
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">Live Cloud Auto-Sync Active</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 font-mono text-[10px] rounded border border-emerald-500/30 font-semibold">
+                        {cloudSyncInfo.status === 'connected' ? 'CONNECTED' : 'SYNCING'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-stone-300 font-mono mt-0.5">
+                      GCP Project: <span className="text-emerald-300 font-bold">{cloudSyncInfo.projectId}</span> &middot; DB: <span className="text-stone-400">{cloudSyncInfo.databaseId}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">Task Scheduler</span>
-                    <Clock className="w-4 h-4 text-stone-500" />
+                <div className="flex items-center gap-2 text-xs flex-wrap">
+                  <span className="text-[11px] text-stone-400 font-mono">
+                    {assets.length} tools &middot; {rentalRequests.length} rentals &middot; {users.length} users synced
+                  </span>
+                  <a
+                    href={`https://console.firebase.google.com/project/${cloudSyncInfo.projectId}/firestore/databases/${cloudSyncInfo.databaseId}/data`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs"
+                    title="Open live Cloud Firestore in Firebase Console"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>View in Firebase Console</span>
+                  </a>
+                  <button
+                    onClick={() => forceCloudResync()}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Sync Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Operating Environment & Technology Stack (8 Pillars) */}
+              <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Server className="w-4 h-4 text-amber-400" />
+                      <span>Operating Environment &amp; Technology Stack Specifications</span>
+                    </h3>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      Production engineering requirements for the Neighborhood Equipment Sharing Platform
+                    </p>
                   </div>
-                  <div className="text-sm font-bold text-white">Cron &amp; Artisan</div>
-                  <div className="text-xs text-stone-400 font-mono">
-                    `rentals:expire-ttl` every min, `rentals:check-overdue` hourly with auto-penalty increments.
-                  </div>
-                  <div className="text-[11px] text-emerald-400 font-mono pt-1 border-t border-stone-800">
-                    Status: Automated &amp; Armed
-                  </div>
+                  <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded font-mono text-[11px] font-bold">
+                    Admin Hub Verified
+                  </span>
                 </div>
 
-                <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">WebSockets &amp; Guard</span>
-                    <ShieldAlert className="w-4 h-4 text-stone-500" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  {/* Pillar 1: Core Backend */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">1. Core Backend</span>
+                      <Server className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">PHP 8.2+ / Laravel 11.x</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      Robust enterprise PHP foundation with route caching, dependency injection, and strict typing.
+                    </div>
                   </div>
-                  <div className="text-sm font-bold text-white">Reverb + Sanctum</div>
-                  <div className="text-xs text-stone-400 font-mono">
-                    EnsureUserIsNotBlacklisted middleware guard with instant WebSocket broadcast pushes.
+
+                  {/* Pillar 2: Web Client & Frontend */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">2. Web Client &amp; Frontend</span>
+                      <Layers className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">Blade / Vue 3 + Tailwind</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      Laravel Blade Templating &amp; Inertia.js responsive UI with zero-pill Tailwind CSS design.
+                    </div>
                   </div>
-                  <div className="text-[11px] text-stone-400 font-mono pt-1 border-t border-stone-800">
-                    Zero-leak channel auth
+
+                  {/* Pillar 3: Database & Spatial Engine */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">3. Database &amp; Spatial</span>
+                      <Compass className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">MySQL 8.0+ / PostgreSQL 15+</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      PostGIS &amp; ST_Distance_Sphere radial queries for neighborhood proximity search.
+                    </div>
+                  </div>
+
+                  {/* Pillar 4: ORM & Data Architecture */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">4. ORM &amp; Architecture</span>
+                      <FileCode className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">Eloquent ORM 11.x</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      Database Migrations, Seeders, Eloquent Observers, and Model Events for rental audit trails.
+                    </div>
+                  </div>
+
+                  {/* Pillar 5: Task Scheduling & Queues */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">5. Scheduler &amp; Queues</span>
+                      <Clock className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">Artisan Task Scheduler</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      `php artisan schedule:run` for TTL expirations and hourly overdue checks backed by Redis queues.
+                    </div>
+                  </div>
+
+                  {/* Pillar 6: Real-Time WebSockets */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">6. Real-Time WebSockets</span>
+                      <Radio className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">Laravel Reverb / Pusher</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      Live event broadcasting for rental status changes, handover confirmation, and instant alerts.
+                    </div>
+                  </div>
+
+                  {/* Pillar 7: Authentication & Middleware */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">7. Auth &amp; Middleware</span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">Sanctum / Breeze Guards</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      EnsureUserIsNotBlacklisted middleware guard blocking penalized users from booking or listing.
+                    </div>
+                  </div>
+
+                  {/* Pillar 8: Mapping & Geospatial API */}
+                  <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold">8. Geospatial Mapping</span>
+                      <MapPin className="w-3.5 h-3.5 text-stone-500" />
+                    </div>
+                    <div className="text-xs font-bold text-white">Leaflet.js / Mapbox API</div>
+                    <div className="text-[11px] text-stone-400 font-mono leading-relaxed">
+                      Geospatial marker clustering, circle radiuses, and neighborhood boundary polygon visualizations.
+                    </div>
                   </div>
                 </div>
               </div>

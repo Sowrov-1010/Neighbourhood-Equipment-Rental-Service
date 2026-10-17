@@ -18,9 +18,11 @@ import {
   Star,
   FileText,
   CheckCircle,
-  ExternalLink
+  ExternalLink,
+  Database
 } from 'lucide-react';
 import { NotificationDropdown } from './NotificationDropdown';
+import { CloudDatabaseSyncModal } from './CloudDatabaseSyncModal';
 
 interface HeaderProps {
   activeTab: 'directory' | 'requests' | 'broadcast' | 'admin' | 'map';
@@ -30,6 +32,7 @@ interface HeaderProps {
   onOpenAuth: (mode?: 'login' | 'register') => void;
   onOpenAdminAuth: () => void;
   onOpenProfile: () => void;
+  onOpenDatabaseHub?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onOpenAdminAuth,
   onOpenProfile,
+  onOpenDatabaseHub,
 }) => {
   const { 
     currentUser, 
@@ -50,11 +54,13 @@ export const Header: React.FC<HeaderProps> = ({
     isAuthenticated,
     unreadNotificationsCount,
     isAdmin,
-    logout
+    logout,
+    cloudSyncInfo
   } = useApp();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showCloudModal, setShowCloudModal] = useState(false);
 
   // User-isolated rentals count
   const myRentalsCount = rentalRequests.filter(
@@ -167,6 +173,25 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 3: Actions & Auth / Profile */}
         <div className="flex items-center gap-3 shrink-0">
+          {/* Cloud DB Live Auto-Sync Status - Restricted to Admin Only */}
+          {isAdmin && (
+            <button
+              onClick={() => setShowCloudModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/30 bg-amber-50/70 hover:bg-amber-100 text-[11px] font-mono text-amber-900 transition-colors"
+              title="Admin Access: Cloud Firestore DB Auto-Persistence & Studio Hub"
+            >
+              <span className={`w-2 h-2 rounded-full ${
+                cloudSyncInfo.status === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                cloudSyncInfo.status === 'syncing' ? 'bg-amber-500 animate-spin' :
+                'bg-stone-400'
+              }`} />
+              <span className="hidden sm:inline font-semibold">
+                {cloudSyncInfo.status === 'syncing' ? 'Syncing...' : 'DB Hub'}
+              </span>
+              <Database className="w-3.5 h-3.5 text-amber-700" />
+            </button>
+          )}
+
           {isAuthenticated ? (
             <>
               {/* Notification Bell Dropdown */}
@@ -359,6 +384,13 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {showCloudModal && (
+        <CloudDatabaseSyncModal
+          onClose={() => setShowCloudModal(false)}
+          onOpenAdminDatabaseHub={onOpenDatabaseHub}
+        />
+      )}
     </header>
   );
 };

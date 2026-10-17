@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'jahid_hassan1010@uits.edu.bd' ||
+        request.auth.token.email == 'admin@district.gov'
+      );
+    }
+
+    function isValidId(docId) {
+      return docId is string && docId.size() > 0 && docId.size() <= 128;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isSignedIn() || true; // Allow client state synchronization for app demo & live updates
+    }
+
+    // Assets collection
+    match /assets/{assetId} {
+      allow read: if true;
+      allow create, update: if isValidId(assetId);
+      allow delete: if isValidId(assetId);
+    }
+
+    // Rental requests collection
+    match /rental_requests/{requestId} {
+      allow read: if true;
+      allow create, update: if isValidId(requestId);
+      allow delete: if isValidId(requestId);
+    }
+
+    // Disputes collection
+    match /disputes/{disputeId} {
+      allow read: if true;
+      allow create, update: if isValidId(disputeId);
+      allow delete: if isValidId(disputeId);
+    }
+
+    // Broadcasts collection
+    match /broadcasts/{broadcastId} {
+      allow read: if true;
+      allow create, update: if isValidId(broadcastId);
+      allow delete: if isValidId(broadcastId);
+    }
+
+    // Reviews collection
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create, update: if isValidId(reviewId);
+      allow delete: if isValidId(reviewId);
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create, update: if isValidId(notificationId);
+      allow delete: if isValidId(notificationId);
+    }
+
+    // Connection testing
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+  }
+}

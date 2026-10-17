@@ -16,7 +16,8 @@ import {
   ExternalLink,
   ChevronRight,
   Terminal,
-  Cpu
+  Cpu,
+  RefreshCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -25,11 +26,13 @@ interface LaravelDatabaseHubModalProps {
 }
 
 export const LaravelDatabaseHubModal: React.FC<LaravelDatabaseHubModalProps> = ({ onClose }) => {
-  const { assets, users, rentalRequests, disputes } = useApp();
-  const [activeTab, setActiveTab] = useState<'sql' | 'laravel' | 'spatial' | 'artisan'>('sql');
+  const { assets, users, rentalRequests, disputes, broadcasts, reviews, cloudSyncInfo, forceCloudResync } = useApp();
+  const [activeTab, setActiveTab] = useState<'sql' | 'laravel' | 'spatial' | 'artisan' | 'cloud'>('sql');
   const [sqlDialect, setSqlDialect] = useState<'mysql' | 'postgres'>('mysql');
   const [selectedFile, setSelectedFile] = useState<string>('Tool.php');
   const [copied, setCopied] = useState<string | null>(null);
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncSuccess, setResyncSuccess] = useState(false);
 
   // Spatial Distance Playground state
   const [testUserLat, setTestUserLat] = useState(37.7749);
@@ -470,6 +473,18 @@ Route::middleware('auth:sanctum')->group(function () {
             <Clock className="w-3.5 h-3.5 text-amber-600" />
             <span>Task Scheduler &amp; Reverb</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('cloud')}
+            className={`py-3 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              activeTab === 'cloud' 
+                ? 'border-emerald-600 text-stone-900 font-bold' 
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live Cloud Auto-Sync (GCP Firestore)</span>
+          </button>
         </div>
 
         {/* Modal Body Content */}
@@ -778,6 +793,148 @@ php artisan queue:work redis
 # 5. Serve application
 php artisan serve`}
                 </pre>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: LIVE CLOUD AUTO-SYNC (GCP FIRESTORE) */}
+          {activeTab === 'cloud' && (
+            <div className="space-y-6">
+              {/* Cloud Banner */}
+              <div className="p-6 bg-stone-900 border border-stone-800 rounded-2xl relative overflow-hidden text-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Database className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg font-bold text-white tracking-tight">
+                          Active Google Cloud Persistence
+                        </h3>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          AUTO-STORING IN AI STUDIO
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-400 mt-1">
+                        Any action you take in the web application is immediately written to Google Cloud Firestore with real-time bidirectional WebSocket replication.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      setResyncing(true);
+                      await forceCloudResync();
+                      setResyncing(false);
+                      setResyncSuccess(true);
+                      setTimeout(() => setResyncSuccess(false), 3000);
+                    }}
+                    disabled={resyncing}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-2 shrink-0 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${resyncing ? 'animate-spin' : ''}`} />
+                    <span>{resyncSuccess ? 'Synced to Cloud!' : resyncing ? 'Pushing...' : 'Force Cloud Push'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-stone-500 font-bold">Cloud Project</span>
+                  <div className="text-sm font-bold font-mono text-stone-900 truncate" title={cloudSyncInfo.projectId}>
+                    {cloudSyncInfo.projectId}
+                  </div>
+                  <div className="text-xs text-stone-500">Google Cloud Platform</div>
+                </div>
+
+                <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-stone-500 font-bold">Firestore Database ID</span>
+                  <div className="text-sm font-bold font-mono text-stone-900 truncate" title={cloudSyncInfo.databaseId}>
+                    {cloudSyncInfo.databaseId}
+                  </div>
+                  <div className="text-xs text-stone-500">Dedicated Applet Instance</div>
+                </div>
+
+                <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-stone-500 font-bold">Live Status</span>
+                  <div className="text-sm font-bold text-emerald-600 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Replication Active</span>
+                  </div>
+                  <div className="text-xs text-stone-500 font-mono">
+                    Last write: {cloudSyncInfo.lastSyncedAt ? new Date(cloudSyncInfo.lastSyncedAt).toLocaleTimeString() : 'Current session'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Collections Status Table */}
+              <div className="border border-stone-200 rounded-xl overflow-hidden bg-white">
+                <div className="px-4 py-3 bg-stone-50 border-b border-stone-200 font-bold text-xs text-stone-800 flex items-center justify-between">
+                  <span>Replicated Cloud Collections</span>
+                  <span className="text-[11px] font-mono font-normal text-stone-500">Real-time onSnapshot Listeners</span>
+                </div>
+                <div className="divide-y divide-stone-100 text-xs">
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-stone-900">/assets</span>
+                      <span className="text-stone-500">&mdash; Equipment listings, pricing, availability &amp; specs</span>
+                    </div>
+                    <span className="font-mono font-bold px-2 py-0.5 bg-stone-100 rounded text-stone-800">{assets.length} docs</span>
+                  </div>
+
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-stone-900">/rental_requests</span>
+                      <span className="text-stone-500">&mdash; 8-state FSM rental transactions &amp; PIN timestamps</span>
+                    </div>
+                    <span className="font-mono font-bold px-2 py-0.5 bg-stone-100 rounded text-stone-800">{rentalRequests.length} docs</span>
+                  </div>
+
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-stone-900">/users</span>
+                      <span className="text-stone-500">&mdash; Resident &amp; Admin profiles, ratings, blacklist states</span>
+                    </div>
+                    <span className="font-mono font-bold px-2 py-0.5 bg-stone-100 rounded text-stone-800">{users.length} docs</span>
+                  </div>
+
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-stone-900">/disputes</span>
+                      <span className="text-stone-500">&mdash; Escalated mediation tickets &amp; official admin directives</span>
+                    </div>
+                    <span className="font-mono font-bold px-2 py-0.5 bg-stone-100 rounded text-stone-800">{disputes.length} docs</span>
+                  </div>
+
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-stone-900">/broadcasts</span>
+                      <span className="text-stone-500">&mdash; Neighborhood equipment wanted demands</span>
+                    </div>
+                    <span className="font-mono font-bold px-2 py-0.5 bg-stone-100 rounded text-stone-800">{broadcasts.length} docs</span>
+                  </div>
+
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-stone-900">/reviews</span>
+                      <span className="text-stone-500">&mdash; Community peer trustworthiness reviews &amp; ratings</span>
+                    </div>
+                    <span className="font-mono font-bold px-2 py-0.5 bg-stone-100 rounded text-stone-800">{reviews.length} docs</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Architecture Harmony Note */}
+              <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl text-xs space-y-2">
+                <div className="font-bold text-stone-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>How AI Studio Persistence Works with your Laravel / SQL Stack</span>
+                </div>
+                <p className="text-stone-600 leading-relaxed">
+                  While running inside Google AI Studio, your application automatically stores and reads all data in <strong>Google Cloud Firestore</strong> so your state persists across browser reloads, edits, and sessions. When you deploy the external Laravel backend, you can use the <strong>SQL Database Exporter</strong> tab above to export your PostgreSQL 15+ (PostGIS) or MySQL 8.0 schema and seeders populated directly with the live data stored here.
+                </p>
               </div>
             </div>
           )}

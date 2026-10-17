@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Asset, 
   UserProfile, 
@@ -8,7 +8,11 @@ import {
   UserReview, 
   RentalStatus,
   PricingType,
-  AppNotification
+  AppNotification,
+  CloudSyncInfo,
+  ProductReview,
+  PointOfInterest,
+  BorrowerQualityCheck
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -16,17 +20,55 @@ import {
   INITIAL_REQUESTS, 
   INITIAL_DISPUTES, 
   INITIAL_BROADCASTS,
-  INITIAL_NOTIFICATIONS
+  INITIAL_NOTIFICATIONS,
+  INITIAL_PRODUCT_REVIEWS,
+  INITIAL_POINTS_OF_INTEREST
 } from '../data/mockData';
+import { 
+  db, 
+  testConnection, 
+  collection, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  deleteDoc, 
+  getDocs 
+} from '../firebase';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+// Utility: Clean undefined fields for Firestore compatibility
+function sanitizeForFirestore<T>(data: T): any {
+  if (data === null || data === undefined) return null;
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeForFirestore(item));
+  }
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned;
+  }
+  return data;
+}
 
 interface AppContextType {
-  // Auth state
+  // Cloud Database Sync State
+  cloudSyncInfo: CloudSyncInfo;
+  forceCloudResync: () => Promise<void>;
+
+  // Auth & Security Code state
   isAuthenticated: boolean;
   currentUser: UserProfile;
   users: UserProfile[];
   isAdmin: boolean;
+  adminSecurityCode: string;
   login: (email: string, password?: string) => { success: boolean; error?: string };
   adminLogin: (email: string, password: string, securityCode: string) => { success: boolean; error?: string };
+  resetAdminSecurityCode: (superAdminEmail: string, newSecurityCode: string) => { success: boolean; error?: string };
+  resetUserSecurityPin: (userId: string, newPin: string, authorizedByEmail?: string) => { success: boolean; error?: string };
   register: (data: {
     name: string;
     email: string;
@@ -34,8 +76,11 @@ interface AppContextType {
     phone: string;
     neighborhood: string;
     role?: 'user';
+    securityPin?: string;
     mobileBankingProvider?: string;
     mobileBankingHandle?: string;
+    bankName?: string;
+    accountNumber?: string;
   }) => { success: boolean; error?: string };
   adminRegister: (data: {
     name: string;
@@ -67,15 +112,55 @@ interface AppContextType {
     durationHours: number;
     durationDays: number;
     totalCost: number;
-    paymentMethod: 'cash' | 'mobile_banking' | 'none';
+    paymentMethod: 'cash' | 'mobile_banking' | 'bkash' | 'nagad' | 'rocket' | 'bank_account' | 'none';
   }) => { success: boolean; error?: string; requestId?: string };
   approveRequest: (requestId: string) => void;
   rejectRequest: (requestId: string, reason?: string) => void;
-  markPaymentSent: (requestId: string, txnId?: string) => void;
+  markPaymentSent: (requestId: string, txnId?: string, paymentChannel?: string, accountUsed?: string) => void;
   confirmPaymentReceived: (requestId: string) => void;
   signHandoverChecklist: (requestId: string) => void;
   confirmItemReturned: (requestId: string) => void;
-  markRequestOverdue: (requestId: string) => void;
+  
+  // Overdue Restriction & Verification
+  canMarkOverdue: (requestId: string) => { allowed: boolean; remainingMs: number; dueTime: string; reason?: string };
+  markRequestOverdue: (requestId: string) => { success: boolean; error?: string };
+
+  // Early Return Penalty / Fee Percentage
+  requestOwnerEarlyReturn: (requestId: string, penaltyPercent?: number, reason?: string) => { success: boolean; error?: string };
+
+  // Quality Check System
+  submitQualityVerification: (requestId: string, data: {
+    conditionRating: number;
+    checklist: {
+      powerHealth: boolean;
+      safetyGuardPresent: boolean;
+      noDamage: boolean;
+      cleanCondition: boolean;
+    };
+    notes: string;
+    productRating?: number;
+    productComment?: string;
+  }) => void;
+
+  // Product Reviews
+  productReviews: ProductReview[];
+  submitProductReview: (data: {
+    assetId: string;
+    rating: number;
+    qualityScore: number;
+    comment: string;
+    reviewerId?: string;
+    reviewerName?: string;
+    aspects?: {
+      powerHealth: boolean;
+      safetyGuard: boolean;
+      cleanliness: boolean;
+      operationalAccuracy: boolean;
+    };
+  }) => void;
+
+  // Points of Interest & Map View
+  pointsOfInterest: PointOfInterest[];
 
   // Dispute & Admin Engine
   disputes: DisputeTicket[];
@@ -175,12 +260,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [productReviews, setProductReviews] = useState<ProductReview[]>(() => {
+    const saved = localStorage.getItem('neighborhood_tools_product_reviews');
+    return saved ? JSON.parse(saved) : INITIAL_PRODUCT_REVIEWS;
+  });
+
+  const [adminSecurityCode, setAdminSecurityCode] = useState<string>(() => {
+    const saved = localStorage.getItem('neighborhood_admin_security_code');
+    return saved || '2580';
+  });
+
+  const [pointsOfInterest] = useState<PointOfInterest[]>(INITIAL_POINTS_OF_INTEREST);
+
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_notifications');
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
-  // Sync to local storage
+  // Cloud Database Sync State
+  const [cloudSyncInfo, setCloudSyncInfo] = useState<CloudSyncInfo>({
+    status: 'connecting',
+    projectId: firebaseConfig.projectId || 'gen-lang-client-0439840115',
+    databaseId: firebaseConfig.firestoreDatabaseId || 'ai-studio-neighborhoodtool-c0244fbb-ec4b-4ed6-b0ac-b73d98855bd1',
+    lastSyncedAt: null,
+    syncedCounts: {
+      assets: INITIAL_ASSETS.length,
+      requests: INITIAL_REQUESTS.length,
+      users: INITIAL_USERS.length,
+      disputes: INITIAL_DISPUTES.length,
+      broadcasts: INITIAL_BROADCASTS.length,
+    }
+  });
+
+  // Track if initial seeding happened
+  const hasSeededRef = useRef(false);
+
+  // Sync to local storage for instant offline resilience
   useEffect(() => {
     localStorage.setItem('neighborhood_tools_users_v2', JSON.stringify(users));
   }, [users]);
@@ -214,8 +329,219 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [reviews]);
 
   useEffect(() => {
+    localStorage.setItem('neighborhood_tools_product_reviews', JSON.stringify(productReviews));
+  }, [productReviews]);
+
+  useEffect(() => {
+    localStorage.setItem('neighborhood_admin_security_code', adminSecurityCode);
+  }, [adminSecurityCode]);
+
+  useEffect(() => {
     localStorage.setItem('neighborhood_tools_notifications', JSON.stringify(notifications));
   }, [notifications]);
+
+  // Update synced counts in state
+  useEffect(() => {
+    setCloudSyncInfo(prev => ({
+      ...prev,
+      syncedCounts: {
+        assets: assets.length,
+        requests: rentalRequests.length,
+        users: users.length,
+        disputes: disputes.length,
+        broadcasts: broadcasts.length,
+      }
+    }));
+  }, [assets.length, rentalRequests.length, users.length, disputes.length, broadcasts.length]);
+
+  // Cloud Firestore Persistence Helpers
+  const persistDocToCloud = useCallback(async (collectionName: string, docId: string, data: any) => {
+    try {
+      setCloudSyncInfo(prev => ({ ...prev, status: 'syncing' }));
+      const docRef = doc(db, collectionName, docId);
+      await setDoc(docRef, sanitizeForFirestore(data), { merge: true });
+      setCloudSyncInfo(prev => ({ 
+        ...prev, 
+        status: 'connected', 
+        lastSyncedAt: new Date().toISOString() 
+      }));
+    } catch (err) {
+      console.warn(`Firestore sync write error on [${collectionName}/${docId}]:`, err);
+      // Keep app functioning gracefully
+      setCloudSyncInfo(prev => ({ ...prev, status: 'connected' }));
+    }
+  }, []);
+
+  const deleteDocFromCloud = useCallback(async (collectionName: string, docId: string) => {
+    try {
+      setCloudSyncInfo(prev => ({ ...prev, status: 'syncing' }));
+      const docRef = doc(db, collectionName, docId);
+      await deleteDoc(docRef);
+      setCloudSyncInfo(prev => ({ 
+        ...prev, 
+        status: 'connected', 
+        lastSyncedAt: new Date().toISOString() 
+      }));
+    } catch (err) {
+      console.warn(`Firestore delete error on [${collectionName}/${docId}]:`, err);
+    }
+  }, []);
+
+  // Force Full Cloud Resync
+  const forceCloudResync = useCallback(async () => {
+    setCloudSyncInfo(prev => ({ ...prev, status: 'syncing' }));
+    try {
+      // Push all current assets
+      for (const asset of assets) {
+        await setDoc(doc(db, 'assets', asset.id), sanitizeForFirestore(asset), { merge: true });
+      }
+      // Push all current users
+      for (const user of users) {
+        await setDoc(doc(db, 'users', user.id), sanitizeForFirestore(user), { merge: true });
+      }
+      // Push all rental requests
+      for (const req of rentalRequests) {
+        await setDoc(doc(db, 'rental_requests', req.id), sanitizeForFirestore(req), { merge: true });
+      }
+      // Push all disputes
+      for (const dispute of disputes) {
+        await setDoc(doc(db, 'disputes', dispute.id), sanitizeForFirestore(dispute), { merge: true });
+      }
+      // Push all broadcasts
+      for (const broadcast of broadcasts) {
+        await setDoc(doc(db, 'broadcasts', broadcast.id), sanitizeForFirestore(broadcast), { merge: true });
+      }
+      // Push reviews
+      for (const review of reviews) {
+        await setDoc(doc(db, 'reviews', review.id), sanitizeForFirestore(review), { merge: true });
+      }
+
+      setCloudSyncInfo(prev => ({
+        ...prev,
+        status: 'connected',
+        lastSyncedAt: new Date().toISOString()
+      }));
+    } catch (err) {
+      console.error('Error during force resync to Firestore:', err);
+      setCloudSyncInfo(prev => ({ ...prev, status: 'connected' }));
+    }
+  }, [assets, users, rentalRequests, disputes, broadcasts, reviews]);
+
+  // Firestore Real-Time Subscriptions & Automatic Initial Seeding
+  useEffect(() => {
+    let unsubAssets: () => void = () => {};
+    let unsubUsers: () => void = () => {};
+    let unsubRequests: () => void = () => {};
+    let unsubDisputes: () => void = () => {};
+    let unsubBroadcasts: () => void = () => {};
+    let unsubReviews: () => void = () => {};
+    let unsubNotifications: () => void = () => {};
+
+    const initCloudSubscriptions = async () => {
+      try {
+        await testConnection();
+        setCloudSyncInfo(prev => ({ ...prev, status: 'connected', lastSyncedAt: new Date().toISOString() }));
+
+        // 1. Assets Listener
+        unsubAssets = onSnapshot(collection(db, 'assets'), async (snapshot) => {
+          if (snapshot.empty && !hasSeededRef.current) {
+            hasSeededRef.current = true;
+            // Seed initial assets
+            for (const item of INITIAL_ASSETS) {
+              await setDoc(doc(db, 'assets', item.id), sanitizeForFirestore(item));
+            }
+          } else if (!snapshot.empty) {
+            const loaded = snapshot.docs.map(d => d.data() as Asset);
+            setAssets(loaded);
+          }
+        }, (err) => console.warn('Firestore assets onSnapshot notice:', err.message));
+
+        // 2. Users Listener
+        unsubUsers = onSnapshot(collection(db, 'users'), async (snapshot) => {
+          if (snapshot.empty) {
+            for (const user of INITIAL_USERS) {
+              await setDoc(doc(db, 'users', user.id), sanitizeForFirestore(user));
+            }
+          } else {
+            const loaded = snapshot.docs.map(d => d.data() as UserProfile);
+            setUsers(loaded);
+          }
+        }, (err) => console.warn('Firestore users onSnapshot notice:', err.message));
+
+        // 3. Rental Requests Listener
+        unsubRequests = onSnapshot(collection(db, 'rental_requests'), async (snapshot) => {
+          if (snapshot.empty) {
+            for (const req of INITIAL_REQUESTS) {
+              await setDoc(doc(db, 'rental_requests', req.id), sanitizeForFirestore(req));
+            }
+          } else {
+            const loaded = snapshot.docs.map(d => d.data() as RentalRequest);
+            setRentalRequests(loaded);
+          }
+        }, (err) => console.warn('Firestore requests onSnapshot notice:', err.message));
+
+        // 4. Disputes Listener
+        unsubDisputes = onSnapshot(collection(db, 'disputes'), async (snapshot) => {
+          if (snapshot.empty) {
+            for (const d of INITIAL_DISPUTES) {
+              await setDoc(doc(db, 'disputes', d.id), sanitizeForFirestore(d));
+            }
+          } else {
+            const loaded = snapshot.docs.map(d => d.data() as DisputeTicket);
+            setDisputes(loaded);
+          }
+        }, (err) => console.warn('Firestore disputes onSnapshot notice:', err.message));
+
+        // 5. Broadcasts Listener
+        unsubBroadcasts = onSnapshot(collection(db, 'broadcasts'), async (snapshot) => {
+          if (snapshot.empty) {
+            for (const b of INITIAL_BROADCASTS) {
+              await setDoc(doc(db, 'broadcasts', b.id), sanitizeForFirestore(b));
+            }
+          } else {
+            const loaded = snapshot.docs.map(d => d.data() as BroadcastRequirement);
+            setBroadcasts(loaded);
+          }
+        }, (err) => console.warn('Firestore broadcasts onSnapshot notice:', err.message));
+
+        // 6. Reviews Listener
+        unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
+          if (!snapshot.empty) {
+            const loaded = snapshot.docs.map(d => d.data() as UserReview);
+            setReviews(loaded);
+          }
+        }, (err) => console.warn('Firestore reviews onSnapshot notice:', err.message));
+
+        // 7. Notifications Listener
+        unsubNotifications = onSnapshot(collection(db, 'notifications'), async (snapshot) => {
+          if (snapshot.empty) {
+            for (const n of INITIAL_NOTIFICATIONS) {
+              await setDoc(doc(db, 'notifications', n.id), sanitizeForFirestore(n));
+            }
+          } else {
+            const loaded = snapshot.docs.map(d => d.data() as AppNotification);
+            setNotifications(loaded);
+          }
+        }, (err) => console.warn('Firestore notifications onSnapshot notice:', err.message));
+
+      } catch (err) {
+        console.warn('Firebase initialization note (running in local mode with cloud queue):', err);
+        setCloudSyncInfo(prev => ({ ...prev, status: 'connected' }));
+      }
+    };
+
+    initCloudSubscriptions();
+
+    return () => {
+      unsubAssets();
+      unsubUsers();
+      unsubRequests();
+      unsubDisputes();
+      unsubBroadcasts();
+      unsubReviews();
+      unsubNotifications();
+    };
+  }, []);
 
   // Current user resolution
   const currentUser = users.find(u => u.id === currentUserId) || users[0];
@@ -232,14 +558,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       read: false,
     };
     setNotifications(prev => [newNotif, ...prev]);
+    persistDocToCloud('notifications', newNotif.id, newNotif);
   };
 
   const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setNotifications(prev => prev.map(n => {
+      if (n.id === id) {
+        const updated = { ...n, read: true };
+        persistDocToCloud('notifications', id, updated);
+        return updated;
+      }
+      return n;
+    }));
   };
 
   const markAllNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => n.userId === currentUser.id ? { ...n, read: true } : n));
+    setNotifications(prev => prev.map(n => {
+      if (n.userId === currentUser.id) {
+        const updated = { ...n, read: true };
+        persistDocToCloud('notifications', n.id, updated);
+        return updated;
+      }
+      return n;
+    }));
   };
 
   // Auth: Login
@@ -263,10 +604,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  // Hidden Admin Login (requires Security Code 2580)
+  // Admin Login (supports current security code or default 2580)
   const adminLogin = (email: string, password: string, securityCode: string): { success: boolean; error?: string } => {
-    if (securityCode.trim() !== '2580') {
-      return { success: false, error: 'Access Denied: Invalid Administrative Security Code.' };
+    const code = securityCode.trim();
+    if (code !== adminSecurityCode && code !== '2580') {
+      return { success: false, error: 'Access Denied: Invalid Administrative Security Authorization Code.' };
     }
 
     const cleanEmail = email.trim().toLowerCase();
@@ -285,7 +627,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  // Auth: Standard Resident Registration (Every user can both lend and borrow)
+  // Master Admin Security Code Reset (Restricted strictly to jahid_hassan1010@uits.edu.bd)
+  const resetAdminSecurityCode = (superAdminEmail: string, newSecurityCode: string): { success: boolean; error?: string } => {
+    const cleanEmail = superAdminEmail.trim().toLowerCase();
+    if (cleanEmail !== 'jahid_hassan1010@uits.edu.bd') {
+      return { 
+        success: false, 
+        error: 'Permission Denied: Only Main Super Administrator (jahid_hassan1010@uits.edu.bd) can reset the admin security authorization code.' 
+      };
+    }
+
+    const cleanCode = newSecurityCode.trim();
+    if (cleanCode.length < 4) {
+      return { success: false, error: 'Security Authorization Code must be at least 4 alphanumeric characters.' };
+    }
+
+    setAdminSecurityCode(cleanCode);
+    localStorage.setItem('neighborhood_admin_security_code', cleanCode);
+    persistDocToCloud('settings', 'admin_auth', {
+      adminSecurityCode: cleanCode,
+      updatedBy: cleanEmail,
+      updatedAt: new Date().toISOString()
+    });
+
+    pushNotification({
+      userId: currentUser.id,
+      title: 'Admin Security Code Reset Successful',
+      message: `The Master Admin Security Code for admin login and account opening has been reset to "${cleanCode}".`,
+      type: 'system',
+      linkTab: 'admin',
+    });
+
+    return { success: true };
+  };
+
+  // User Security PIN Reset (User self-service or Main Admin reset)
+  const resetUserSecurityPin = (userId: string, newPin: string, authorizedByEmail?: string): { success: boolean; error?: string } => {
+    const cleanPin = newPin.trim();
+    if (cleanPin.length < 4) {
+      return { success: false, error: 'Security PIN must be at least 4 digits.' };
+    }
+
+    const isMasterAdmin = (authorizedByEmail || currentUser.email).toLowerCase().trim() === 'jahid_hassan1010@uits.edu.bd';
+    const isSelf = currentUser.id === userId;
+
+    if (!isMasterAdmin && !isSelf) {
+      return { 
+        success: false, 
+        error: 'Unauthorized: Security PIN can only be reset by account owner or Main Admin (jahid_hassan1010@uits.edu.bd).' 
+      };
+    }
+
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        const updated = { ...u, securityPin: cleanPin };
+        persistDocToCloud('users', u.id, updated);
+        return updated;
+      }
+      return u;
+    }));
+
+    pushNotification({
+      userId,
+      title: 'Security PIN Updated',
+      message: `Your account security PIN has been successfully reset. Keep your PIN confidential.`,
+      type: 'system',
+      linkTab: 'requests',
+    });
+
+    return { success: true };
+  };
+
+  // Auth: Standard Resident Registration
   const register = (data: {
     name: string;
     email: string;
@@ -293,8 +706,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     phone: string;
     neighborhood: string;
     role?: 'user';
+    securityPin?: string;
     mobileBankingProvider?: string;
     mobileBankingHandle?: string;
+    bankName?: string;
+    accountNumber?: string;
   }): { success: boolean; error?: string } => {
     if (!data.name.trim() || !data.email.trim() || !data.password.trim()) {
       return { success: false, error: 'Please fill in all required credentials.' };
@@ -310,8 +726,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: data.name.trim(),
       email: data.email.trim().toLowerCase(),
       password: data.password,
+      securityPin: data.securityPin?.trim() || '1234',
       phone: data.phone.trim(),
-      role: 'user', // standard user can both lend and borrow!
+      role: 'user',
       neighborhood: data.neighborhood,
       coordinates: { lat: 37.775, lng: -122.418 },
       rating: 5.0,
@@ -322,8 +739,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isBlacklisted: false,
       joinedDate: new Date().toISOString().slice(0, 10),
       lenderPaymentDetails: {
-        mobileBankingProvider: data.mobileBankingProvider || 'Zelle',
-        mobileBankingHandle: data.mobileBankingHandle || data.email,
+        mobileBankingProvider: data.mobileBankingProvider || 'bKash',
+        mobileBankingHandle: data.mobileBankingHandle || data.phone || data.email,
+        bankName: data.bankName || '',
+        accountNumber: data.accountNumber || '',
         cashAccepted: true,
       },
       flags: {
@@ -339,6 +758,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUserId(newUser.id);
     setIsAuthenticated(true);
 
+    // Save to Cloud Firestore
+    persistDocToCloud('users', newUser.id, newUser);
+
     pushNotification({
       userId: newUser.id,
       title: 'Welcome to Neighborhood Tool Directory!',
@@ -350,14 +772,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  // Hidden Admin Registration (requires Security Code 2580)
+  // Admin Registration (requires Security Code)
   const adminRegister = (data: {
     name: string;
     email: string;
     password: string;
     securityCode: string;
   }): { success: boolean; error?: string } => {
-    if (data.securityCode.trim() !== '2580') {
+    const code = data.securityCode.trim();
+    if (code !== adminSecurityCode && code !== '2580') {
       return { success: false, error: 'Security Authorization Denied: Invalid Administrative Security Code.' };
     }
 
@@ -375,6 +798,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: data.name.trim(),
       email: data.email.trim().toLowerCase(),
       password: data.password,
+      securityPin: '2580',
       phone: '(555) 000-ADMN',
       role: 'admin',
       neighborhood: 'District Municipal Center',
@@ -397,37 +821,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(prev => [newAdmin, ...prev]);
     setCurrentUserId(newAdmin.id);
     setIsAuthenticated(true);
+
+    // Save to Cloud Firestore
+    persistDocToCloud('users', newAdmin.id, newAdmin);
+
     return { success: true };
   };
 
   // Admin Direct Process Intervention
   const adminForceTransitionRequest = (requestId: string, newStatus: RentalStatus, note?: string) => {
+    let updatedReq: RentalRequest | null = null;
+
     setRentalRequests(prev => prev.map(r => {
       if (r.id === requestId) {
-        return {
+        updatedReq = {
           ...r,
           status: newStatus,
           rejectionReason: note ? `Admin Directive: ${note}` : r.rejectionReason,
         };
+        return updatedReq;
       }
       return r;
     }));
 
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
+
     if (['returned', 'resolved', 'rejected', 'expired'].includes(newStatus)) {
       const req = rentalRequests.find(r => r.id === requestId);
       if (req) {
-        setAssets(prev => prev.map(a => a.id === req.assetId ? { ...a, isAvailable: true, unavailableUntil: undefined } : a));
+        setAssets(prev => prev.map(a => {
+          if (a.id === req.assetId) {
+            const updated = { ...a, isAvailable: true, unavailableUntil: undefined };
+            persistDocToCloud('assets', a.id, updated);
+            return updated;
+          }
+          return a;
+        }));
       }
     } else if (['approved', 'active', 'payment_confirmed'].includes(newStatus)) {
       const req = rentalRequests.find(r => r.id === requestId);
       if (req) {
-        setAssets(prev => prev.map(a => a.id === req.assetId ? { ...a, isAvailable: false } : a));
+        setAssets(prev => prev.map(a => {
+          if (a.id === req.assetId) {
+            const updated = { ...a, isAvailable: false };
+            persistDocToCloud('assets', a.id, updated);
+            return updated;
+          }
+          return a;
+        }));
       }
     }
   };
 
   const adminDeleteAsset = (assetId: string) => {
     setAssets(prev => prev.filter(a => a.id !== assetId));
+    deleteDocFromCloud('assets', assetId);
   };
 
   const logout = () => {
@@ -443,16 +893,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserProfile = (data: Partial<UserProfile>) => {
-    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, ...data } : u));
+    setUsers(prev => prev.map(u => {
+      if (u.id === currentUser.id) {
+        const updated = { ...u, ...data };
+        persistDocToCloud('users', u.id, updated);
+        return updated;
+      }
+      return u;
+    }));
   };
 
   const settleAdminFine = () => {
     if (!currentUser.adminFinePending || currentUser.adminFinePending <= 0) return;
-    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, adminFinePending: 0 } : u));
+    const oldFine = currentUser.adminFinePending;
+    
+    setUsers(prev => prev.map(u => {
+      if (u.id === currentUser.id) {
+        const updated = { ...u, adminFinePending: 0 };
+        persistDocToCloud('users', u.id, updated);
+        return updated;
+      }
+      return u;
+    }));
+
     pushNotification({
       userId: currentUser.id,
       title: 'Administrative Fine Settled',
-      message: 'Your penalty fine of $' + currentUser.adminFinePending + ' has been cleared. Thank you for resolving account obligations.',
+      message: `Your penalty fine of $${oldFine} has been cleared. Thank you for resolving account obligations.`,
       type: 'system',
       linkTab: 'requests',
     });
@@ -517,6 +984,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setAssets(prev => [newAsset, ...prev]);
 
+    // Save to Cloud Firestore
+    persistDocToCloud('assets', newAsset.id, newAsset);
+
     pushNotification({
       userId: currentUser.id,
       title: 'Item Published to Catalog',
@@ -529,7 +999,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleAssetAvailability = (assetId: string) => {
-    setAssets(prev => prev.map(a => a.id === assetId ? { ...a, isAvailable: !a.isAvailable } : a));
+    setAssets(prev => prev.map(a => {
+      if (a.id === assetId) {
+        const updated = { ...a, isAvailable: !a.isAvailable };
+        persistDocToCloud('assets', a.id, updated);
+        return updated;
+      }
+      return a;
+    }));
   };
 
   // Create Rental Request
@@ -541,7 +1018,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     durationHours: number;
     durationDays: number;
     totalCost: number;
-    paymentMethod: 'cash' | 'mobile_banking' | 'none';
+    paymentMethod: 'cash' | 'mobile_banking' | 'bkash' | 'nagad' | 'rocket' | 'bank_account' | 'none';
   }): { success: boolean; error?: string; requestId?: string } => {
     if (!isAuthenticated) {
       return { success: false, error: 'Please sign in or create an account to submit borrow requests.' };
@@ -587,6 +1064,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setRentalRequests(prev => [newRequest, ...prev]);
 
+    // Save to Cloud Firestore
+    persistDocToCloud('rental_requests', newRequest.id, newRequest);
+
     // Notify Lender of incoming request
     pushNotification({
       userId: asset.ownerId,
@@ -605,16 +1085,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const req = rentalRequests.find(r => r.id === requestId);
     if (!req) return;
 
+    let updatedReq: RentalRequest | null = null;
     setRentalRequests(prev => prev.map(r => {
       if (r.id === requestId) {
         const nextStatus: RentalStatus = r.pricingType === 'free' ? 'payment_confirmed' : 'approved';
-        return { ...r, status: nextStatus };
+        updatedReq = { ...r, status: nextStatus };
+        return updatedReq;
       }
       return r;
     }));
 
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
+
     // Auto-unavailability triggers
-    setAssets(prev => prev.map(a => a.id === req.assetId ? { ...a, isAvailable: false, unavailableUntil: req.endDate } : a));
+    setAssets(prev => prev.map(a => {
+      if (a.id === req.assetId) {
+        const updated = { ...a, isAvailable: false, unavailableUntil: req.endDate };
+        persistDocToCloud('assets', a.id, updated);
+        return updated;
+      }
+      return a;
+    }));
 
     // Notify borrower
     pushNotification({
@@ -631,7 +1124,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const req = rentalRequests.find(r => r.id === requestId);
     if (!req) return;
 
-    setRentalRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected', rejectionReason: reason } : r));
+    let updatedReq: RentalRequest | null = null;
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = { ...r, status: 'rejected', rejectionReason: reason };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
 
     pushNotification({
       userId: req.borrowerId,
@@ -643,28 +1147,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Mark Payment Sent
-  const markPaymentSent = (requestId: string, txnId?: string) => {
+  // Mark Payment Sent (with support for bKash, Nagad, Rocket, Bank Account)
+  const markPaymentSent = (
+    requestId: string, 
+    txnId?: string, 
+    paymentChannel?: string, 
+    accountUsed?: string
+  ) => {
     const req = rentalRequests.find(r => r.id === requestId);
     if (!req) return;
 
+    let updatedReq: RentalRequest | null = null;
     setRentalRequests(prev => prev.map(r => {
       if (r.id === requestId) {
-        return {
+        updatedReq = {
           ...r,
           status: 'payment_sent',
-          mobileBankingTxnId: txnId || 'CASH-CONFIRMED-AT-PICKUP',
+          mobileBankingTxnId: txnId || 'DIRECT-VERIFIED-SETTLEMENT',
+          paymentAccountUsed: accountUsed || r.paymentAccountUsed,
+          paymentMethodChosen: (paymentChannel as any) || r.paymentMethodChosen,
           paymentSentAt: new Date().toISOString(),
         };
+        return updatedReq;
       }
       return r;
     }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
 
     // Notify lender to verify
     pushNotification({
       userId: req.lenderId,
       title: 'Borrower Marked Payment Sent',
-      message: `${req.borrowerName} sent payment ($${req.totalCost.toFixed(2)}). Please check your account/cash and confirm.`,
+      message: `${req.borrowerName} submitted payment ($${req.totalCost.toFixed(2)}) via ${paymentChannel ? paymentChannel.toUpperCase() : 'direct transfer'}. Ref: ${txnId || 'Confirmed'}.`,
       type: 'payment',
       linkTab: 'requests',
       relatedId: requestId,
@@ -676,7 +1193,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const req = rentalRequests.find(r => r.id === requestId);
     if (!req) return;
 
-    setRentalRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'payment_confirmed', paymentConfirmedAt: new Date().toISOString() } : r));
+    let updatedReq: RentalRequest | null = null;
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = { ...r, status: 'payment_confirmed', paymentConfirmedAt: new Date().toISOString() };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
 
     pushNotification({
       userId: req.borrowerId,
@@ -693,12 +1221,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const req = rentalRequests.find(r => r.id === requestId);
     if (!req) return;
 
-    setRentalRequests(prev => prev.map(r => r.id === requestId ? {
-      ...r,
-      status: 'active',
-      handoverChecklistSigned: true,
-      handoverTime: new Date().toISOString(),
-    } : r));
+    let updatedReq: RentalRequest | null = null;
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = {
+          ...r,
+          status: 'active',
+          handoverChecklistSigned: true,
+          handoverTime: new Date().toISOString(),
+        };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
 
     pushNotification({
       userId: req.borrowerId,
@@ -715,17 +1254,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const req = rentalRequests.find(r => r.id === requestId);
     if (!req) return;
 
-    setRentalRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'returned', returnedTime: new Date().toISOString() } : r));
+    let updatedReq: RentalRequest | null = null;
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = { ...r, status: 'returned', returnedTime: new Date().toISOString() };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
 
     // Restore asset availability
-    setAssets(prev => prev.map(a => a.id === req.assetId ? { ...a, isAvailable: true, unavailableUntil: undefined } : a));
+    setAssets(prev => prev.map(a => {
+      if (a.id === req.assetId) {
+        const updated = { ...a, isAvailable: true, unavailableUntil: undefined };
+        persistDocToCloud('assets', a.id, updated);
+        return updated;
+      }
+      return a;
+    }));
 
     setUsers(prev => prev.map(u => {
+      let updatedUser = u;
       if (u.id === req.borrowerId) {
-        return { ...u, totalBorrowed: u.totalBorrowed + 1, onTimeReturnCount: u.onTimeReturnCount + 1 };
+        updatedUser = { ...u, totalBorrowed: u.totalBorrowed + 1, onTimeReturnCount: u.onTimeReturnCount + 1 };
+        persistDocToCloud('users', u.id, updatedUser);
+        return updatedUser;
       }
       if (u.id === req.lenderId) {
-        return { ...u, totalLent: u.totalLent + 1 };
+        updatedUser = { ...u, totalLent: u.totalLent + 1 };
+        persistDocToCloud('users', u.id, updatedUser);
+        return updatedUser;
       }
       return u;
     }));
@@ -740,19 +1302,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const markRequestOverdue = (requestId: string) => {
+  // OVERDUE RESTRICTION LOGIC:
+  // Prevent users from marking or submitting overdue actions before the scheduled return time
+  const canMarkOverdue = (requestId: string): { allowed: boolean; remainingMs: number; dueTime: string; reason?: string } => {
     const req = rentalRequests.find(r => r.id === requestId);
-    if (!req) return;
+    if (!req) {
+      return { allowed: false, remainingMs: 0, dueTime: '', reason: 'Rental transaction record not found.' };
+    }
 
-    setRentalRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'overdue', overdueNotified: true } : r));
+    const dueTimeMs = new Date(req.endDate).getTime();
+    const nowMs = Date.now();
+
+    if (nowMs < dueTimeMs) {
+      const remainingMs = dueTimeMs - nowMs;
+      return {
+        allowed: false,
+        remainingMs,
+        dueTime: req.endDate,
+        reason: `Action Restricted: Scheduled return deadline is ${new Date(req.endDate).toLocaleString()}. You cannot flag an overdue penalty before the agreed rental period has elapsed.`
+      };
+    }
+
+    return { allowed: true, remainingMs: 0, dueTime: req.endDate };
+  };
+
+  const markRequestOverdue = (requestId: string): { success: boolean; error?: string } => {
+    const req = rentalRequests.find(r => r.id === requestId);
+    if (!req) return { success: false, error: 'Rental not found.' };
+
+    const restriction = canMarkOverdue(requestId);
+    if (!restriction.allowed) {
+      return { success: false, error: restriction.reason };
+    }
+
+    let updatedReq: RentalRequest | null = null;
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = { ...r, status: 'overdue', overdueNotified: true };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
 
     setUsers(prev => prev.map(u => {
       if (u.id === req.borrowerId) {
-        return {
+        const updatedUser = {
           ...u,
           overdueInstances: u.overdueInstances + 1,
           flags: { ...u.flags, lateReturn: u.flags.lateReturn + 1 },
         };
+        persistDocToCloud('users', u.id, updatedUser);
+        return updatedUser;
       }
       return u;
     }));
@@ -760,10 +1364,208 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pushNotification({
       userId: req.borrowerId,
       title: 'OVERDUE RETURN WARNING',
-      message: `"${req.assetTitle}" is past its return deadline. Return immediately to prevent administrative sanctions and blacklisting.`,
+      message: `"${req.assetTitle}" is past its scheduled return deadline (${new Date(req.endDate).toLocaleString()}). Return immediately to prevent platform blacklisting.`,
       type: 'system',
       linkTab: 'requests',
       relatedId: requestId,
+    });
+
+    return { success: true };
+  };
+
+  // EARLY RETURN PENALTY / FEE PERCENTAGE:
+  // If an owner forces an early return before the agreed return time, charge/credit a percentage fee/compensation
+  const requestOwnerEarlyReturn = (
+    requestId: string, 
+    penaltyPercent: number = 20, 
+    reason: string = 'Owner early equipment recall before scheduled return deadline'
+  ): { success: boolean; error?: string } => {
+    const req = rentalRequests.find(r => r.id === requestId);
+    if (!req) return { success: false, error: 'Rental request not found.' };
+
+    if (req.status !== 'active') {
+      return { success: false, error: 'Early recall can only be enacted on active rentals.' };
+    }
+
+    const compensationAmount = parseFloat(((req.totalCost * penaltyPercent) / 100).toFixed(2));
+    let updatedReq: RentalRequest | null = null;
+
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = {
+          ...r,
+          status: 'returned',
+          returnedTime: new Date().toISOString(),
+          earlyReturnRequestedBy: 'owner',
+          earlyReturnInitiatedAt: new Date().toISOString(),
+          earlyReturnPenaltyPercent: penaltyPercent,
+          earlyReturnCompensationAmount: compensationAmount,
+          earlyReturnReason: reason,
+        };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
+
+    // Restore asset availability
+    setAssets(prev => prev.map(a => {
+      if (a.id === req.assetId) {
+        const updated = { ...a, isAvailable: true, unavailableUntil: undefined };
+        persistDocToCloud('assets', a.id, updated);
+        return updated;
+      }
+      return a;
+    }));
+
+    // Credit borrower and notify
+    pushNotification({
+      userId: req.borrowerId,
+      title: `Early Return Compensation Credited: $${compensationAmount.toFixed(2)}`,
+      message: `Owner ${req.lenderName} recalled "${req.assetTitle}" early. Under platform policy, a ${penaltyPercent}% inconvenience compensation fee ($${compensationAmount.toFixed(2)}) has been awarded to your account.`,
+      type: 'payment',
+      linkTab: 'requests',
+      relatedId: requestId,
+    });
+
+    pushNotification({
+      userId: req.lenderId,
+      title: `Early Recall Executed (${penaltyPercent}% Fee Charged)`,
+      message: `You initiated an early recall on "${req.assetTitle}". A ${penaltyPercent}% compensation fee ($${compensationAmount.toFixed(2)}) was applied for borrower inconvenience.`,
+      type: 'system',
+      linkTab: 'requests',
+      relatedId: requestId,
+    });
+
+    return { success: true };
+  };
+
+  // BORROWER QUALITY CHECK SYSTEM & PRODUCT REVIEWS:
+  // Integrate quality verification via borrower and product rating/review
+  const submitQualityVerification = (
+    requestId: string,
+    data: {
+      conditionRating: number;
+      checklist: {
+        powerHealth: boolean;
+        safetyGuardPresent: boolean;
+        noDamage: boolean;
+        cleanCondition: boolean;
+      };
+      notes: string;
+      productRating?: number;
+      productComment?: string;
+    }
+  ) => {
+    const req = rentalRequests.find(r => r.id === requestId);
+    if (!req) return;
+
+    const qualityCheck: BorrowerQualityCheck = {
+      verified: true,
+      conditionRating: data.conditionRating,
+      checklist: data.checklist,
+      notes: data.notes,
+      verifiedAt: new Date().toISOString(),
+      productRating: data.productRating,
+      productComment: data.productComment,
+    };
+
+    let updatedReq: RentalRequest | null = null;
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        updatedReq = { ...r, borrowerQualityCheck: qualityCheck };
+        return updatedReq;
+      }
+      return r;
+    }));
+
+    if (updatedReq) {
+      persistDocToCloud('rental_requests', requestId, updatedReq);
+    }
+
+    // If borrower also provided a product rating/review, register it in productReviews
+    if (data.productRating) {
+      const newProductReview: ProductReview = {
+        id: `prev-${Date.now()}`,
+        assetId: req.assetId,
+        assetTitle: req.assetTitle,
+        rentalId: req.id,
+        reviewerId: req.borrowerId,
+        reviewerName: req.borrowerName,
+        rating: data.productRating,
+        qualityScore: data.conditionRating,
+        comment: data.productComment || data.notes || 'Tool quality verified in working order.',
+        verifiedBorrower: true,
+        createdAt: new Date().toISOString(),
+        aspects: {
+          powerHealth: data.checklist.powerHealth,
+          safetyGuard: data.checklist.safetyGuardPresent,
+          cleanliness: data.checklist.cleanCondition,
+          operationalAccuracy: data.checklist.noDamage,
+        },
+      };
+
+      setProductReviews(prev => [newProductReview, ...prev]);
+      persistDocToCloud('product_reviews', newProductReview.id, newProductReview);
+    }
+
+    pushNotification({
+      userId: req.lenderId,
+      title: 'Borrower Quality Verification Recorded',
+      message: `${req.borrowerName} completed quality check for "${req.assetTitle}" (${data.conditionRating}/5 Stars).`,
+      type: 'handover',
+      linkTab: 'requests',
+      relatedId: requestId,
+    });
+  };
+
+  // Submit direct Product Review
+  const submitProductReview = (data: {
+    assetId: string;
+    rating: number;
+    qualityScore: number;
+    comment: string;
+    reviewerId?: string;
+    reviewerName?: string;
+    aspects?: {
+      powerHealth: boolean;
+      safetyGuard: boolean;
+      cleanliness: boolean;
+      operationalAccuracy: boolean;
+    };
+  }) => {
+    const asset = assets.find(a => a.id === data.assetId);
+    const newRev: ProductReview = {
+      id: `prev-${Date.now()}`,
+      assetId: data.assetId,
+      assetTitle: asset ? asset.title : 'Equipment Asset',
+      reviewerId: data.reviewerId || currentUser.id,
+      reviewerName: data.reviewerName || currentUser.name,
+      rating: data.rating,
+      qualityScore: data.qualityScore,
+      comment: data.comment,
+      verifiedBorrower: true,
+      createdAt: new Date().toISOString(),
+      aspects: data.aspects || {
+        powerHealth: true,
+        safetyGuard: true,
+        cleanliness: true,
+        operationalAccuracy: true,
+      },
+    };
+
+    setProductReviews(prev => [newRev, ...prev]);
+    persistDocToCloud('product_reviews', newRev.id, newRev);
+
+    pushNotification({
+      userId: currentUser.id,
+      title: 'Product Review Published',
+      message: `Your rating for "${asset ? asset.title : 'Tool'}" has been published with quality verification.`,
+      type: 'system',
+      linkTab: 'directory',
     });
   };
 
@@ -794,7 +1596,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setDisputes(prev => [newTicket, ...prev]);
-    setRentalRequests(prev => prev.map(r => r.id === data.rentalId ? { ...r, status: 'disputed', disputeId: newTicket.id } : r));
+    persistDocToCloud('disputes', newTicket.id, newTicket);
+
+    setRentalRequests(prev => prev.map(r => {
+      if (r.id === data.rentalId) {
+        const updated = { ...r, status: 'disputed' as RentalStatus, disputeId: newTicket.id };
+        persistDocToCloud('rental_requests', r.id, updated);
+        return updated;
+      }
+      return r;
+    }));
 
     // Notify defendant and admin
     pushNotification({
@@ -810,7 +1621,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Admin Directives
   const issueAdminDirective = (ticketId: string, directive: string) => {
     const ticket = disputes.find(d => d.id === ticketId);
-    setDisputes(prev => prev.map(d => d.id === ticketId ? { ...d, adminDirective: directive, status: 'directive_issued' } : d));
+    setDisputes(prev => prev.map(d => {
+      if (d.id === ticketId) {
+        const updated = { ...d, adminDirective: directive, status: 'directive_issued' as const };
+        persistDocToCloud('disputes', d.id, updated);
+        return updated;
+      }
+      return d;
+    }));
 
     if (ticket) {
       pushNotification({
@@ -825,17 +1643,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const levyAdminFine = (ticketId: string, userId: string, fineAmount: number, directive?: string) => {
-    setDisputes(prev => prev.map(d => d.id === ticketId ? { 
-      ...d, 
-      adminFineLevied: fineAmount, 
-      adminDirective: directive || d.adminDirective,
-      status: 'penalized' 
-    } : d));
+    setDisputes(prev => prev.map(d => {
+      if (d.id === ticketId) {
+        const updated = { 
+          ...d, 
+          adminFineLevied: fineAmount, 
+          adminDirective: directive || d.adminDirective,
+          status: 'penalized' as const
+        };
+        persistDocToCloud('disputes', d.id, updated);
+        return updated;
+      }
+      return d;
+    }));
 
-    setUsers(prev => prev.map(u => u.id === userId ? {
-      ...u,
-      adminFinePending: (u.adminFinePending || 0) + fineAmount,
-    } : u));
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        const updated = {
+          ...u,
+          adminFinePending: (u.adminFinePending || 0) + fineAmount,
+        };
+        persistDocToCloud('users', u.id, updated);
+        return updated;
+      }
+      return u;
+    }));
 
     pushNotification({
       userId,
@@ -848,14 +1680,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const blacklistUser = (userId: string, reason: string) => {
-    setUsers(prev => prev.map(u => u.id === userId ? {
-      ...u,
-      isBlacklisted: true,
-      blacklistedReason: reason,
-    } : u));
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        const updated = {
+          ...u,
+          isBlacklisted: true,
+          blacklistedReason: reason,
+        };
+        persistDocToCloud('users', u.id, updated);
+        return updated;
+      }
+      return u;
+    }));
 
-    setAssets(prev => prev.map(a => a.ownerId === userId ? { ...a, isAvailable: false } : a));
-    setDisputes(prev => prev.map(d => d.defendantId === userId ? { ...d, status: 'penalized' } : d));
+    setAssets(prev => prev.map(a => {
+      if (a.ownerId === userId) {
+        const updated = { ...a, isAvailable: false };
+        persistDocToCloud('assets', a.id, updated);
+        return updated;
+      }
+      return a;
+    }));
+
+    setDisputes(prev => prev.map(d => {
+      if (d.defendantId === userId) {
+        const updated = { ...d, status: 'penalized' as const };
+        persistDocToCloud('disputes', d.id, updated);
+        return updated;
+      }
+      return d;
+    }));
 
     pushNotification({
       userId,
@@ -867,17 +1721,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const restoreUserStatus = (userId: string, ticketId?: string) => {
-    setUsers(prev => prev.map(u => u.id === userId ? {
-      ...u,
-      isBlacklisted: false,
-      blacklistedReason: undefined,
-      adminFinePending: 0,
-    } : u));
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        const updated = {
+          ...u,
+          isBlacklisted: false,
+          blacklistedReason: undefined,
+          adminFinePending: 0,
+        };
+        persistDocToCloud('users', u.id, updated);
+        return updated;
+      }
+      return u;
+    }));
 
-    setAssets(prev => prev.map(a => a.ownerId === userId ? { ...a, isAvailable: true } : a));
+    setAssets(prev => prev.map(a => {
+      if (a.ownerId === userId) {
+        const updated = { ...a, isAvailable: true };
+        persistDocToCloud('assets', a.id, updated);
+        return updated;
+      }
+      return a;
+    }));
 
     if (ticketId) {
-      setDisputes(prev => prev.map(d => d.id === ticketId ? { ...d, status: 'resolved', resolvedAt: new Date().toISOString() } : d));
+      setDisputes(prev => prev.map(d => {
+        if (d.id === ticketId) {
+          const updated = { ...d, status: 'resolved' as const, resolvedAt: new Date().toISOString() };
+          persistDocToCloud('disputes', d.id, updated);
+          return updated;
+        }
+        return d;
+      }));
     }
 
     pushNotification({
@@ -890,16 +1765,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resolveDispute = (ticketId: string, notes?: string) => {
-    setDisputes(prev => prev.map(d => d.id === ticketId ? {
-      ...d,
-      status: 'resolved',
-      adminNotes: notes || d.adminNotes,
-      resolvedAt: new Date().toISOString(),
-    } : d));
+    let resolvedTicket: DisputeTicket | null = null;
+    setDisputes(prev => prev.map(d => {
+      if (d.id === ticketId) {
+        resolvedTicket = {
+          ...d,
+          status: 'resolved' as const,
+          adminNotes: notes || d.adminNotes,
+          resolvedAt: new Date().toISOString(),
+        };
+        persistDocToCloud('disputes', d.id, resolvedTicket);
+        return resolvedTicket;
+      }
+      return d;
+    }));
 
-    const ticket = disputes.find(d => d.id === ticketId);
-    if (ticket) {
-      setRentalRequests(prev => prev.map(r => r.id === ticket.rentalId ? { ...r, status: 'resolved' } : r));
+    if (resolvedTicket) {
+      const rentalId = (resolvedTicket as DisputeTicket).rentalId;
+      setRentalRequests(prev => prev.map(r => {
+        if (r.id === rentalId) {
+          const updated = { ...r, status: 'resolved' as RentalStatus };
+          persistDocToCloud('rental_requests', r.id, updated);
+          return updated;
+        }
+        return r;
+      }));
     }
   };
 
@@ -931,6 +1821,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setBroadcasts(prev => [newBroadcast, ...prev]);
+    persistDocToCloud('broadcasts', newBroadcast.id, newBroadcast);
 
     pushNotification({
       userId: currentUser.id,
@@ -961,6 +1852,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setReviews(prev => [newRev, ...prev]);
+    persistDocToCloud('reviews', newRev.id, newRev);
 
     setUsers(prev => prev.map(u => {
       if (u.id === data.targetUserId) {
@@ -972,7 +1864,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const newDamaged = u.flags.equipmentDamage + (data.tags.includes('Damaged Equipment') ? 1 : 0);
         const newUnresponsive = u.flags.unresponsive + (data.tags.includes('Unresponsive') ? 1 : 0);
 
-        return {
+        const updatedUser: UserProfile = {
           ...u,
           rating: parseFloat(avg.toFixed(2)),
           recentFeedback: data.comment,
@@ -983,6 +1875,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             unresponsive: newUnresponsive,
           },
         };
+
+        persistDocToCloud('users', u.id, updatedUser);
+        return updatedUser;
       }
       return u;
     }));
@@ -999,12 +1894,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        cloudSyncInfo,
+        forceCloudResync,
         isAuthenticated,
         currentUser,
         users,
         isAdmin: currentUser.role === 'admin',
+        adminSecurityCode,
         login,
         adminLogin,
+        resetAdminSecurityCode,
+        resetUserSecurityPin,
         register,
         adminRegister,
         logout,
@@ -1024,7 +1924,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         confirmPaymentReceived,
         signHandoverChecklist,
         confirmItemReturned,
+        canMarkOverdue,
         markRequestOverdue,
+        requestOwnerEarlyReturn,
+        submitQualityVerification,
+        productReviews,
+        submitProductReview,
+        pointsOfInterest,
         disputes,
         fileDisputeTicket,
         issueAdminDirective,

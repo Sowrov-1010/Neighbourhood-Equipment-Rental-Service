@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing neighborhood standing and role",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "neighborhood": { "type": "string" },
+        "rating": { "type": "number" },
+        "isBlacklisted": { "type": "boolean" },
+        "totalBorrowed": { "type": "number" },
+        "totalLent": { "type": "number" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "Lendable physical tool or equipment asset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "pricingType": { "type": "string" },
+        "priceAmount": { "type": "number" },
+        "condition": { "type": "string" },
+        "isAvailable": { "type": "boolean" },
+        "ownerId": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "neighborhood": { "type": "string" }
+      },
+      "required": ["id", "title", "category", "ownerId", "isAvailable"]
+    },
+    "RentalRequest": {
+      "title": "RentalRequest",
+      "description": "Finite state machine rental request lifecycle item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "assetId": { "type": "string" },
+        "assetTitle": { "type": "string" },
+        "lenderId": { "type": "string" },
+        "borrowerId": { "type": "string" },
+        "status": { "type": "string" },
+        "pricingType": { "type": "string" },
+        "totalCost": { "type": "number" },
+        "requestedAt": { "type": "string" }
+      },
+      "required": ["id", "assetId", "lenderId", "borrowerId", "status"]
+    },
+    "DisputeTicket": {
+      "title": "DisputeTicket",
+      "description": "Admin escalated dispute record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "rentalId": { "type": "string" },
+        "complainantId": { "type": "string" },
+        "defendantId": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "rentalId", "complainantId", "defendantId", "status"]
+    },
+    "BroadcastRequirement": {
+      "title": "BroadcastRequirement",
+      "description": "Neighborhood request broadcast for missing tools",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "borrowerId": { "type": "string" },
+        "requiredItem": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "borrowerId", "requiredItem"]
+    },
+    "UserReview": {
+      "title": "UserReview",
+      "description": "Trust rating and review left for borrower or lender",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reviewerId": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" }
+      },
+      "required": ["id", "reviewerId", "targetUserId", "rating"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification alert",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "message"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile directory"
+    },
+    "/assets/{assetId}": {
+      "schema": { "$ref": "#/entities/Asset" },
+      "description": "Community tools and equipment assets"
+    },
+    "/rental_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/RentalRequest" },
+      "description": "Active and historical rental state lifecycle"
+    },
+    "/disputes/{disputeId}": {
+      "schema": { "$ref": "#/entities/DisputeTicket" },
+      "description": "Dispute mediation cases"
+    },
+    "/broadcasts/{broadcastId}": {
+      "schema": { "$ref": "#/entities/BroadcastRequirement" },
+      "description": "Tool wanted broadcasts"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/UserReview" },
+      "description": "Peer reviews and trustworthiness logs"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Live alerts and notifications"
+    }
+  }
+}

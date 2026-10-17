@@ -311,22 +311,26 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
               {(acceptedPayments === 'mobile_banking' || acceptedPayments === 'both') && (
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                   <div>
-                    <span className="text-[11px] text-stone-500 block mb-1">Mobile Banking Service</span>
-                    <input
-                      type="text"
+                    <span className="text-[11px] text-stone-500 block mb-1">Payment Method / Gateway</span>
+                    <select
                       value={bankingProvider}
                       onChange={(e) => setBankingProvider(e.target.value)}
-                      placeholder="e.g. Zelle, Venmo, Direct ACH"
-                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
-                    />
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs font-semibold focus:ring-1 focus:ring-stone-600 focus:outline-none"
+                    >
+                      <option value="bKash">bKash (MFS)</option>
+                      <option value="Nagad">Nagad (MFS)</option>
+                      <option value="Rocket">Rocket (DBBL)</option>
+                      <option value="Bank Account">Bank Account Transfer</option>
+                      <option value="Other">Other Gateway</option>
+                    </select>
                   </div>
                   <div>
-                    <span className="text-[11px] text-stone-500 block mb-1">Account Handle / ID</span>
+                    <span className="text-[11px] text-stone-500 block mb-1">Account Number / Handle</span>
                     <input
                       type="text"
                       value={bankingHandle}
                       onChange={(e) => setBankingHandle(e.target.value)}
-                      placeholder="e.g. name@neighborhood.org or @tag"
+                      placeholder="e.g. 01711-XXXXXX or Account No."
                       className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs font-mono focus:ring-1 focus:ring-stone-600 focus:outline-none"
                     />
                   </div>

@@ -113,6 +113,7 @@ function MainApp() {
         onOpenAuth={handleOpenAuth}
         onOpenAdminAuth={() => setShowAdminAuthModal(true)}
         onOpenProfile={() => setShowProfileModal(true)}
+        onOpenDatabaseHub={() => setAdminViewMode('console')}
       />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-8">
@@ -180,6 +181,7 @@ function MainApp() {
         <AssetDetailModal
           asset={selectedAsset}
           onClose={() => setSelectedAsset(null)}
+          onOpenAuth={(mode) => handleOpenAuth(mode)}
           onRequestSuccess={(requestId) => {
             setSelectedAsset(null);
             setActiveTab('requests');
