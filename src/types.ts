@@ -122,6 +122,8 @@ export interface UserProfile {
   overdueInstances: number;
   isBlacklisted: boolean;
   standing?: ResidentStanding;
+  standingUpdatedAt?: string;
+  standingUpdatedBy?: string;
   blacklistedReason?: string;
   adminFinePending?: number;
   joinedDate?: string;

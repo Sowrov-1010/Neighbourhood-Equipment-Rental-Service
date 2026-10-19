@@ -4,7 +4,7 @@ import {
   ShieldAlert, 
   FileText, 
   Gavel, 
-  DollarSign, 
+  Banknote,
   UserX, 
   UserCheck, 
   CheckCircle, 
@@ -199,7 +199,7 @@ export const AdminPortal: React.FC = () => {
                 </div>
                 {defendantUser?.adminFinePending ? (
                   <div className="text-red-700 font-bold font-mono">
-                    Pending Administrative Fine: ${defendantUser.adminFinePending}
+                    Pending Administrative Fine: ৳{defendantUser.adminFinePending}
                   </div>
                 ) : null}
               </div>
@@ -245,7 +245,7 @@ export const AdminPortal: React.FC = () => {
                 </p>
                 {selectedTicket.adminFineLevied ? (
                   <div className="text-red-700 font-bold font-mono pt-1">
-                    Administrative Fine Assessed: ${selectedTicket.adminFineLevied}.00
+                    Administrative Fine Assessed: ৳{selectedTicket.adminFineLevied}.00
                   </div>
                 ) : null}
               </div>
@@ -298,8 +298,8 @@ export const AdminPortal: React.FC = () => {
                     onClick={() => levyAdminFine(selectedTicket.id, selectedTicket.defendantId, fineAmount)}
                     className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded transition-colors flex items-center gap-1.5"
                   >
-                    <DollarSign className="w-3.5 h-3.5" />
-                    <span>Assess Fine (${fineAmount})</span>
+                    <Banknote className="w-3.5 h-3.5" />
+                    <span>Assess Fine (৳{fineAmount})</span>
                   </button>
                 </div>
                 <div className="text-[11px] text-stone-500">

@@ -31,6 +31,7 @@ import {
   INITIAL_PRODUCT_REVIEWS,
   INITIAL_POINTS_OF_INTEREST
 } from '../data/mockData';
+import { formatDistance } from '../distance';
 import { 
   db, 
   testConnection, 
@@ -85,6 +86,10 @@ function normalizeLegacyPersonaNames<T>(value: T): T {
 
 const MAIN_ADMIN_EMAIL = 'jahid_hassan1010@uits.edu.bd';
 const ASSISTANT_ADMIN_EMAIL = 'admin@district.org';
+const DEMO_RESIDENT_COORDINATES: Record<string, UserProfile['coordinates']> = {
+  'u-borrower-good': { lat: 37.7765, lng: -122.4168 },
+  'u-borrower-risk': { lat: 37.7732, lng: -122.4200 },
+};
 
 function normalizeUserRole(user: UserProfile): UserProfile {
   const normalizedUser = normalizeLegacyPersonaNames(user);
@@ -117,11 +122,16 @@ function normalizeUserRole(user: UserProfile): UserProfile {
   }] : []);
   return {
     ...normalizedUser,
+    coordinates: DEMO_RESIDENT_COORDINATES[normalizedUser.id] || normalizedUser.coordinates,
     email: normalizedEmail,
     role,
     roleVersion: 2,
     supportRequests,
   };
+}
+
+function normalizeAssetDistance(asset: Asset): Asset {
+  return { ...asset, distanceKm: Math.min(asset.distanceKm, 0.49) };
 }
 
 async function normalizeCloudDocuments<T>(
@@ -181,13 +191,14 @@ interface AppContextType {
   requestCredentialRecovery: (identifier: string, category: ResidentSupportCategory, message: string) => { success: boolean; error?: string };
   resetResidentCredentials: (userId: string, credentials: { password?: string; securityPin?: string; supportRequestId?: string; message?: string }) => { success: boolean; error?: string };
   resolveResidentSupportRequest: (userId: string, requestId: string, resolution: string) => { success: boolean; error?: string };
+  deleteResolvedResidentSupportRequest: (userId: string, requestId: string) => { success: boolean; error?: string };
   getResidentSupportByEmail: (email: string) => { residentName: string; requests: ResidentSupportRequest[] } | null;
   sendResidentSupportMessage: (email: string, requestId: string, message: string) => { success: boolean; error?: string };
   sendAdminSupportMessage: (userId: string, requestId: string, message: string) => { success: boolean; error?: string };
   logout: () => void;
   setCurrentUserById: (userId: string) => void;
   updateUserProfile: (data: Partial<UserProfile>) => void;
-  updateUserStanding: (userId: string, standing: ResidentStanding) => void;
+  updateUserStanding: (userId: string, standing: ResidentStanding) => { success: boolean; error?: string };
   updateUserRole: (userId: string, role: Exclude<PlatformRole, 'assistant'>) => { success: boolean; error?: string };
   adminRemoveResident: (userId: string) => { success: boolean; error?: string };
   settleAdminFine: () => void;
@@ -276,6 +287,7 @@ interface AppContextType {
   blacklistUser: (userId: string, reason: string) => void;
   restoreUserStatus: (userId: string, ticketId?: string) => void;
   resolveDispute: (ticketId: string, notes?: string) => void;
+  deleteResolvedDispute: (ticketId: string) => { success: boolean; error?: string };
 
   // Broadcasts
   broadcasts: BroadcastRequirement[];
@@ -338,7 +350,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('neighborhood_tools_assets');
     const assets: Asset[] = saved ? JSON.parse(saved) : INITIAL_ASSETS;
-    return normalizeLegacyPersonaNames(assets).map(asset => ({ ...asset, neighborhood: normalizeNeighborhoodName(asset.neighborhood) }));
+    return normalizeLegacyPersonaNames(assets).map(asset => normalizeAssetDistance({
+      ...asset,
+      neighborhood: normalizeNeighborhoodName(asset.neighborhood),
+    }));
   });
 
   const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>(() => {
@@ -553,7 +568,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           } else if (!snapshot.empty) {
             const loaded = (await normalizeCloudDocuments<Asset>('assets', snapshot.docs)).map(asset => {
-              return { ...asset, neighborhood: normalizeNeighborhoodName(asset.neighborhood) };
+              return normalizeAssetDistance({ ...asset, neighborhood: normalizeNeighborhoodName(asset.neighborhood) });
             });
             setAssets(loaded);
           }
@@ -817,6 +832,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       linkTab: 'requests',
       relatedId: requestId,
     });
+    return { success: true };
+  };
+
+  const deleteResolvedResidentSupportRequest = (
+    userId: string,
+    requestId: string
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'assistant') {
+      return { success: false, error: 'Only an administrator or assistant can delete resident requests.' };
+    }
+    const resident = users.find(user => user.id === userId && user.role === 'resident');
+    const ticket = resident?.supportRequests?.find(request => request.id === requestId);
+    if (!resident || !ticket || ticket.status !== 'resolved') {
+      return { success: false, error: 'Resolved resident request not found.' };
+    }
+
+    const updatedUser: UserProfile = {
+      ...resident,
+      supportRequests: resident.supportRequests?.filter(request => request.id !== requestId),
+    };
+    setUsers(previous => previous.map(user => user.id === userId ? updatedUser : user));
+    persistDocToCloud('users', userId, updatedUser);
     return { success: true };
   };
 
@@ -1265,13 +1302,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const updateUserStanding = (userId: string, standing: ResidentStanding) => {
-    setUsers(prev => prev.map(user => {
-      if (user.id !== userId) return user;
-      const updated = { ...user, standing };
-      persistDocToCloud('users', user.id, updated);
-      return updated;
-    }));
+  const updateUserStanding = (
+    userId: string,
+    standing: ResidentStanding
+  ): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'assistant') {
+      return { success: false, error: 'Only an administrator or assistant can update resident standing.' };
+    }
+    const resident = users.find(user => user.id === userId && user.role === 'resident');
+    if (!resident) return { success: false, error: 'Resident account not found.' };
+    if (!['Active', 'Red Badge', 'Monitoring', 'Suspicious', 'Improving'].includes(standing)) {
+      return { success: false, error: 'Invalid resident standing.' };
+    }
+
+    const updatedAt = new Date().toISOString();
+    const updatedUser: UserProfile = {
+      ...resident,
+      standing,
+      standingUpdatedAt: updatedAt,
+      standingUpdatedBy: currentUser.name,
+    };
+    setUsers(prev => prev.map(user => user.id === userId ? updatedUser : user));
+    persistDocToCloud('users', userId, updatedUser);
+    pushNotification({
+      userId,
+      title: 'Resident standing updated',
+      message: `${currentUser.name} updated your standing to ${standing}.`,
+      type: 'system',
+      linkTab: 'requests',
+    });
+    return { success: true };
   };
 
   const updateUserRole = (
@@ -1337,7 +1397,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pushNotification({
       userId: currentUser.id,
       title: 'Administrative Fine Settled',
-      message: `Your penalty fine of $${oldFine} has been cleared. Thank you for resolving account obligations.`,
+      message: `Your penalty fine of ৳${oldFine} has been cleared. Thank you for resolving account obligations.`,
       type: 'system',
       linkTab: 'requests',
     });
@@ -1599,7 +1659,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pushNotification({
       userId: req.lenderId,
       title: 'Borrower Marked Payment Sent',
-      message: `${req.borrowerName} submitted payment ($${req.totalCost.toFixed(2)}) via ${paymentChannel ? paymentChannel.toUpperCase() : 'direct transfer'}. Ref: ${txnId || 'Confirmed'}.`,
+      message: `${req.borrowerName} submitted payment (৳${req.totalCost.toFixed(2)}) via ${paymentChannel ? paymentChannel.toUpperCase() : 'direct transfer'}. Ref: ${txnId || 'Confirmed'}.`,
       type: 'payment',
       linkTab: 'requests',
       relatedId: requestId,
@@ -1842,8 +1902,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Credit borrower and notify
     pushNotification({
       userId: req.borrowerId,
-      title: `Early Return Compensation Credited: $${compensationAmount.toFixed(2)}`,
-      message: `Owner ${req.lenderName} recalled "${req.assetTitle}" early. Under platform policy, a ${penaltyPercent}% inconvenience compensation fee ($${compensationAmount.toFixed(2)}) has been awarded to your account.`,
+      title: `Early Return Compensation Credited: ৳${compensationAmount.toFixed(2)}`,
+      message: `Owner ${req.lenderName} recalled "${req.assetTitle}" early. Under platform policy, a ${penaltyPercent}% inconvenience compensation fee (৳${compensationAmount.toFixed(2)}) has been awarded to your account.`,
       type: 'payment',
       linkTab: 'requests',
       relatedId: requestId,
@@ -1852,7 +1912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pushNotification({
       userId: req.lenderId,
       title: `Early Recall Executed (${penaltyPercent}% Fee Charged)`,
-      message: `You initiated an early recall on "${req.assetTitle}". A ${penaltyPercent}% compensation fee ($${compensationAmount.toFixed(2)}) was applied for borrower inconvenience.`,
+      message: `You initiated an early recall on "${req.assetTitle}". A ${penaltyPercent}% compensation fee (৳${compensationAmount.toFixed(2)}) was applied for borrower inconvenience.`,
       type: 'system',
       linkTab: 'requests',
       relatedId: requestId,
@@ -2090,7 +2150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pushNotification({
       userId,
       title: 'ADMINISTRATIVE PENALTY FINE ASSESSED',
-      message: `A statutory fine of $${fineAmount}.00 has been levied against your account for breach of lending policies.`,
+      message: `A statutory fine of ৳${fineAmount}.00 has been levied against your account for breach of lending policies.`,
       type: 'dispute',
       linkTab: 'requests',
       relatedId: ticketId,
@@ -2211,6 +2271,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const deleteResolvedDispute = (ticketId: string): { success: boolean; error?: string } => {
+    if (currentUser.role !== 'admin' && currentUser.role !== 'assistant') {
+      return { success: false, error: 'Only an administrator or assistant can delete resolved cases.' };
+    }
+    const ticket = disputes.find(dispute => dispute.id === ticketId);
+    if (!ticket || ticket.status !== 'resolved') {
+      return { success: false, error: 'Resolved dispute case not found.' };
+    }
+
+    setDisputes(previous => previous.filter(dispute => dispute.id !== ticketId));
+    deleteDocFromCloud('disputes', ticketId);
+    return { success: true };
+  };
+
   // Broadcasts
   const createBroadcast = (data: {
     requiredItem: string;
@@ -2244,7 +2318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pushNotification({
       userId: currentUser.id,
       title: 'Broadcast Requirement Published',
-      message: `Your search for "${data.requiredItem}" has been dispatched to ${matchedCount} nearby neighbors within ${data.maxDistanceKm} km.`,
+      message: `Your search for "${data.requiredItem}" has been dispatched to ${matchedCount} nearby neighbors within ${formatDistance(data.maxDistanceKm)}.`,
       type: 'broadcast',
       linkTab: 'broadcast',
     });
@@ -2328,6 +2402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestCredentialRecovery,
         resetResidentCredentials,
         resolveResidentSupportRequest,
+        deleteResolvedResidentSupportRequest,
         getResidentSupportByEmail,
         sendResidentSupportMessage,
         sendAdminSupportMessage,
@@ -2365,6 +2440,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         blacklistUser,
         restoreUserStatus,
         resolveDispute,
+        deleteResolvedDispute,
         broadcasts,
         createBroadcast,
         reviews,

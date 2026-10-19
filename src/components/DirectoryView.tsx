@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Asset, PricingType } from '../types';
 import { AssetCard } from './AssetCard';
+import { formatDistance } from '../distance';
 import { 
   Search, 
   SlidersHorizontal, 
@@ -38,7 +39,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Equipment');
   const [selectedPricing, setSelectedPricing] = useState<string>('all');
-  const [maxDistance, setMaxDistance] = useState<number>(10);
+  const [maxDistance, setMaxDistance] = useState<number>(10000);
   const [onlyAvailable, setOnlyAvailable] = useState<boolean>(false);
   const [viewScope, setViewScope] = useState<'all' | 'mine'>('all');
 
@@ -52,7 +53,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
     } else {
       // Hide listings if owner is blacklisted in public view
       if (onlyAvailable && !a.isAvailable) return false;
-      if (a.distanceKm > maxDistance) return false;
+      if (a.distanceKm * 1000 > maxDistance) return false;
     }
 
     if (selectedCategory !== 'All Equipment' && a.category !== selectedCategory) return false;
@@ -103,7 +104,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-stone-800 text-xs text-stone-300">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Strictly $0 Deposit</span>
+            <span>Strictly ৳0 Deposit</span>
           </div>
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-amber-400 shrink-0" />
@@ -162,7 +163,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
           </button>
         </div>
 
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search Box */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -176,11 +177,11 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
           </div>
 
           {/* Pricing Model Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 text-xs font-medium">
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 lg:pb-0 text-xs font-medium">
             <span className="text-stone-600 mr-1 text-[11px] whitespace-nowrap">Model:</span>
             {[
               { key: 'all', label: 'All Rates' },
-              { key: 'free', label: 'Free ($0)' },
+              { key: 'free', label: 'Free (৳0)' },
               { key: 'hourly', label: 'Hourly' },
               { key: 'daily', label: 'Daily' },
               { key: 'per_use', label: 'Per-Use' },
@@ -203,7 +204,7 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
         {/* Secondary Category and Radius Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-stone-100 text-xs">
           {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {CATEGORIES.map(cat => (
               <button
                 key={cat}
@@ -220,14 +221,14 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
           </div>
 
           {/* Radius Slider and Availability Toggle */}
-          <div className="flex items-center gap-4 shrink-0 font-mono text-[11px] text-stone-600">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] text-stone-600">
             <div className="flex items-center gap-2">
-              <span>Radius: <strong>{maxDistance} km</strong></span>
+              <span>Radius: <strong>{formatDistance(maxDistance / 1000)}</strong></span>
               <input
                 type="range"
-                min="0.5"
-                max="10"
-                step="0.5"
+                min="500"
+                max="10000"
+                step="500"
                 value={maxDistance}
                 onChange={(e) => setMaxDistance(parseFloat(e.target.value))}
                 className="w-24 accent-stone-900 cursor-pointer"

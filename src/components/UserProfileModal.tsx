@@ -10,7 +10,7 @@ import {
   Phone, 
   Mail, 
   Star, 
-  DollarSign, 
+  Banknote,
   CheckCircle, 
   LogOut, 
   Edit3,
@@ -62,6 +62,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
   const [adminCodeMsg, setAdminCodeMsg] = useState('');
 
   const isRedBadge = isHighRiskBorrower(currentUser);
+  const displayedStanding = currentUser.standing || (isRedBadge ? 'Red Badge' : 'Active');
+  const standingStyles: Record<string, string> = {
+    Active: 'bg-emerald-600 text-white',
+    'Red Badge': 'bg-red-600 text-white',
+    Monitoring: 'bg-blue-600 text-white',
+    Suspicious: 'bg-orange-600 text-white',
+    Improving: 'bg-violet-600 text-white',
+  };
   const totalCompleted = currentUser.totalBorrowed;
   const onTimePercentage = totalCompleted > 0 
     ? Math.round((currentUser.onTimeReturnCount / totalCompleted) * 100) 
@@ -172,26 +180,28 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
           <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
             currentUser.isBlacklisted
               ? 'bg-red-50 border-red-300'
-              : isRedBadge
+              : displayedStanding === 'Red Badge'
               ? 'bg-red-50/40 border-red-200'
-              : 'bg-stone-50 border-stone-200'
+                : displayedStanding === 'Suspicious'
+                  ? 'bg-orange-50 border-orange-200'
+                  : displayedStanding === 'Monitoring'
+                    ? 'bg-blue-50 border-blue-200'
+                    : displayedStanding === 'Improving'
+                      ? 'bg-violet-50 border-violet-200'
+                : 'bg-stone-50 border-stone-200'
           }`}>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-lg font-bold text-stone-900">{currentUser.name}</h4>
-                {currentUser.isBlacklisted ? (
-                  <span className="text-[10px] font-bold uppercase font-mono px-2 py-0.5 rounded bg-red-600 text-white">
-                    Blacklisted
-                  </span>
-                ) : isRedBadge ? (
-                  <span className="text-[10px] font-bold uppercase font-mono px-2 py-0.5 rounded bg-red-600 text-white">
-                    Red Badge Risk
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold uppercase font-mono px-2 py-0.5 rounded bg-emerald-600 text-white">
-                    Reliable Standing
-                  </span>
-                )}
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-lg font-bold text-stone-900">{currentUser.name}</h4>
+                  {currentUser.isBlacklisted ? (
+                    <span className="text-[10px] font-bold uppercase font-mono px-2 py-0.5 rounded bg-red-600 text-white">
+                      Blacklisted
+                    </span>
+                  ) : (
+                    <span className={`text-[10px] font-bold uppercase font-mono px-2 py-0.5 rounded ${standingStyles[displayedStanding]}`}>
+                      {displayedStanding}
+                    </span>
+                  )}
                 {isMasterAdmin && (
                   <span className="text-[10px] font-bold uppercase font-mono px-2 py-0.5 rounded bg-amber-500 text-stone-950 flex items-center gap-1 shadow-xs">
                     <Crown className="w-3 h-3" />
@@ -207,6 +217,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
               </div>
             </div>
 
+            {currentUser.standingUpdatedAt && currentUser.standingUpdatedBy && (
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-lg text-xs text-stone-600">
+                <span className="font-semibold text-stone-800">Administrator update:</span>{' '}
+                Your standing was set to <strong>{displayedStanding}</strong> by {currentUser.standingUpdatedBy} on{' '}
+                {new Date(currentUser.standingUpdatedAt).toLocaleString()}.
+              </div>
+            )}
+
             <div className="text-right sm:border-l sm:border-stone-200 sm:pl-4">
               <div className="text-[11px] text-stone-500">Peer Rating</div>
               <div className="text-xl font-bold font-mono text-stone-900 flex items-center sm:justify-end gap-1">
@@ -221,7 +239,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
             <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-2">
               <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
                 <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span>Outstanding Municipal Fine: ${currentUser.adminFinePending}</span>
+                <span>Outstanding Municipal Fine: ৳{currentUser.adminFinePending}</span>
               </div>
               <p className="text-xs text-amber-800">
                 Assessed for platform policy breach or delayed return. Settle to satisfy community compliance.
@@ -230,8 +248,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
                 onClick={settleAdminFine}
                 className="w-full py-2 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs"
               >
-                <DollarSign className="w-4 h-4 text-emerald-400" />
-                <span>Settle Administrative Fine (${currentUser.adminFinePending})</span>
+                <Banknote className="w-4 h-4 text-emerald-400" />
+                <span>Settle Administrative Fine (৳{currentUser.adminFinePending})</span>
               </button>
             </div>
           ) : null}

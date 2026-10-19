@@ -20,7 +20,6 @@ import {
   HelpCircle,
   X,
   Sliders,
-  DollarSign,
   ShieldCheck,
   Check
 } from 'lucide-react';
@@ -282,7 +281,7 @@ export const RentalTrackView: React.FC<RentalTrackViewProps> = ({
                         {/* Early Return Compensation Badge */}
                         {req.earlyReturnCompensationAmount && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-800 border border-amber-400/40">
-                            Early Recalled ({req.earlyReturnPenaltyPercent}% Compensation: ${req.earlyReturnCompensationAmount.toFixed(2)})
+                            Early Recalled ({req.earlyReturnPenaltyPercent}% Compensation: ৳{req.earlyReturnCompensationAmount.toFixed(2)})
                           </span>
                         )}
 
@@ -304,7 +303,7 @@ export const RentalTrackView: React.FC<RentalTrackViewProps> = ({
                         <span>Borrower: <strong>{req.borrowerName}</strong> ({req.borrowerRating} ★)</span>
                         <span aria-hidden="true">&middot;</span>
                         <span className="font-mono font-semibold text-stone-900">
-                          {req.pricingType === 'free' ? '$0.00 Free Share' : `$${req.totalCost.toFixed(2)} (${req.paymentMethodChosen.toUpperCase()})`}
+                          {req.pricingType === 'free' ? '৳0.00 Free Share' : `৳${req.totalCost.toFixed(2)} (${req.paymentMethodChosen.toUpperCase()})`}
                         </span>
                       </div>
                     </div>
@@ -554,7 +553,7 @@ export const RentalTrackView: React.FC<RentalTrackViewProps> = ({
               />
               <div className="flex justify-between text-[11px] text-stone-500 pt-1">
                 <span>Standard (10%)</span>
-                <span>Calculated Compensation: <strong className="text-stone-900 font-mono text-xs">${((earlyReturnModalReq.totalCost * earlyPenaltyPct) / 100).toFixed(2)}</strong></span>
+                <span>Calculated Compensation: <strong className="text-stone-900 font-mono text-xs">৳{((earlyReturnModalReq.totalCost * earlyPenaltyPct) / 100).toFixed(2)}</strong></span>
                 <span>Maximum (50%)</span>
               </div>
             </div>

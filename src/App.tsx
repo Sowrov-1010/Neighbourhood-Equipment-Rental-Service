@@ -113,9 +113,7 @@ function MainApp() {
         onOpenCreateListing={handleOpenCreateListing}
         onOpenBroadcast={handleOpenBroadcast}
         onOpenAuth={handleOpenAuth}
-        onOpenAdminAuth={() => setShowAdminAuthModal(true)}
         onOpenProfile={() => setShowProfileModal(true)}
-        onOpenDatabaseHub={() => setAdminViewMode('console')}
       />
       <ResidentSupportChat />
 

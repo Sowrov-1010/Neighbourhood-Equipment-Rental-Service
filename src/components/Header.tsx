@@ -10,19 +10,11 @@ import {
   Bell, 
   LogIn, 
   UserPlus, 
-  KeyRound, 
-  Building2, 
-  Layers,
   User,
   LogOut,
-  Star,
   FileText,
-  CheckCircle,
-  ExternalLink,
-  Database
 } from 'lucide-react';
 import { NotificationDropdown } from './NotificationDropdown';
-import { CloudDatabaseSyncModal } from './CloudDatabaseSyncModal';
 
 interface HeaderProps {
   activeTab: 'directory' | 'requests' | 'broadcast' | 'admin' | 'map';
@@ -30,9 +22,7 @@ interface HeaderProps {
   onOpenCreateListing: () => void;
   onOpenBroadcast: () => void;
   onOpenAuth: (mode?: 'login' | 'register') => void;
-  onOpenAdminAuth: () => void;
   onOpenProfile: () => void;
-  onOpenDatabaseHub?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,26 +31,20 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCreateListing,
   onOpenBroadcast,
   onOpenAuth,
-  onOpenAdminAuth,
   onOpenProfile,
-  onOpenDatabaseHub,
 }) => {
   const { 
     currentUser, 
     users, 
     setCurrentUserById, 
-    disputes, 
     rentalRequests, 
     isAuthenticated,
     unreadNotificationsCount,
-    isAdmin,
     logout,
-    cloudSyncInfo
   } = useApp();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showCloudModal, setShowCloudModal] = useState(false);
 
   // User-isolated rentals count
   const myRentalsCount = rentalRequests.filter(
@@ -71,10 +55,15 @@ export const Header: React.FC<HeaderProps> = ({
   const pendingRequestsCount = rentalRequests.filter(
     r => r.lenderId === currentUser.id && r.status === 'requested'
   ).length;
+  const displayedStanding = currentUser.standing || (currentUser.rating < 3.0 ? 'Red Badge' : 'Active');
 
   // Active disputes count
-  const openDisputesCount = disputes.filter(d => d.status === 'under_investigation').length;
-
+  const mobileTabs: { id: HeaderProps['activeTab']; label: string }[] = [
+    { id: 'directory', label: 'Inventory' },
+    { id: 'requests', label: `Rental Track (${myRentalsCount})` },
+    { id: 'broadcast', label: 'Broadcasts' },
+    { id: 'map', label: 'Radius Map' },
+  ];
   return (
     <header className="border-b border-stone-200 bg-white sticky top-0 z-40">
       {/* Blacklist banner if user is blacklisted */}
@@ -90,27 +79,27 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-8">
+      <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 min-h-16 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2 lg:flex-nowrap lg:gap-8 lg:py-0">
         {/* Zone 1: Brand wordmark (single text element wordmark, no pill badge) */}
         <button 
           onClick={() => setActiveTab('directory')} 
-          className="text-left flex items-center gap-2.5 whitespace-nowrap shrink-0 group focus-visible:outline-none"
+          className="text-left flex items-center gap-2.5 min-w-0 group focus-visible:outline-none"
         >
-          <div className="w-9 h-9 rounded-lg bg-stone-900 text-stone-100 flex items-center justify-center font-bold tracking-tight">
+          <div className="w-9 h-9 rounded-lg bg-stone-900 text-stone-100 flex items-center justify-center font-bold tracking-tight shrink-0">
             <Wrench className="w-5 h-5 text-amber-400" />
           </div>
-          <div>
-            <span className="text-base font-bold tracking-tight text-stone-900 group-hover:text-stone-700 transition-colors">
+          <div className="min-w-0">
+            <span className="block truncate text-sm sm:text-base font-bold tracking-tight text-stone-900 group-hover:text-stone-700 transition-colors">
               Community Tool & Appliance Directory
             </span>
-            <div className="text-[11px] text-stone-600 font-medium tracking-normal">
+            <div className="text-[10px] sm:text-[11px] text-stone-600 font-medium tracking-normal truncate">
               Peer lending & equipment sharing
             </div>
           </div>
         </button>
 
         {/* Zone 2: 4-5 single-line clean nav links */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-stone-600">
+        <nav className="hidden xl:flex items-center gap-6 text-sm font-medium text-stone-600">
           <button
             onClick={() => setActiveTab('directory')}
             className={`whitespace-nowrap shrink-0 transition-colors hover:text-stone-900 ${
@@ -151,47 +140,10 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Radius Map
           </button>
-
-          {/* Dedicated Admin Tab only for authenticated Admin */}
-          {isAdmin && (
-            <button
-              onClick={() => setActiveTab('admin')}
-              className={`whitespace-nowrap shrink-0 transition-colors hover:text-amber-600 relative flex items-center gap-1 font-bold ${
-                activeTab === 'admin' ? 'text-amber-600 border-b-2 border-amber-500 py-5' : 'py-5 text-amber-700'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Admin Console</span>
-              {openDisputesCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 bg-red-600 text-white text-[10px] font-bold rounded-sm">
-                  {openDisputesCount}
-                </span>
-              )}
-            </button>
-          )}
         </nav>
 
         {/* Zone 3: Actions & Auth / Profile */}
-        <div className="flex items-center gap-3 shrink-0">
-          {/* Cloud DB Live Auto-Sync Status - Restricted to Admin Only */}
-          {isAdmin && (
-            <button
-              onClick={() => setShowCloudModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/30 bg-amber-50/70 hover:bg-amber-100 text-[11px] font-mono text-amber-900 transition-colors"
-              title="Admin Access: Cloud Firestore DB Auto-Persistence & Studio Hub"
-            >
-              <span className={`w-2 h-2 rounded-full ${
-                cloudSyncInfo.status === 'connected' ? 'bg-emerald-500 animate-pulse' :
-                cloudSyncInfo.status === 'syncing' ? 'bg-amber-500 animate-spin' :
-                'bg-stone-400'
-              }`} />
-              <span className="hidden sm:inline font-semibold">
-                {cloudSyncInfo.status === 'syncing' ? 'Syncing...' : 'DB Hub'}
-              </span>
-              <Database className="w-3.5 h-3.5 text-amber-700" />
-            </button>
-          )}
-
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {isAuthenticated ? (
             <>
               {/* Notification Bell Dropdown */}
@@ -219,16 +171,14 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 text-xs font-medium text-stone-800 transition-colors whitespace-nowrap shrink-0"
+                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 text-xs font-medium text-stone-800 transition-colors min-w-0"
                   title="Manage account profile and rentals"
                 >
-                  <div className="text-left">
+                  <div className="text-left hidden sm:block">
                     <div className="font-semibold text-stone-900 flex items-center gap-1.5">
                       <span>{currentUser.name}</span>
                       {currentUser.isBlacklisted ? (
                         <span className="text-[10px] text-red-600 font-bold tracking-wider">[BLACKLISTED]</span>
-                      ) : currentUser.rating < 3.0 ? (
-                        <span className="text-[10px] text-red-600 font-bold">[RED BADGE]</span>
                       ) : currentUser.role === 'admin' || currentUser.role === 'assistant' ? (
                         <span className="text-[10px] text-amber-600 font-bold font-mono">
                           {currentUser.role === 'assistant' ? '[ASSISTANT ADMIN]' : '[ADMIN]'}
@@ -236,14 +186,22 @@ export const Header: React.FC<HeaderProps> = ({
                       ) : currentUser.role === 'moderator' ? (
                         <span className="text-[10px] text-blue-600 font-bold font-mono">[MODERATOR]</span>
                       ) : (
-                        <span className="text-[10px] text-stone-500 font-normal">Resident</span>
+                        <span className={`text-[10px] font-bold ${
+                          displayedStanding === 'Red Badge' ? 'text-red-600'
+                            : displayedStanding === 'Suspicious' ? 'text-orange-600'
+                              : displayedStanding === 'Monitoring' ? 'text-blue-600'
+                                : displayedStanding === 'Improving' ? 'text-violet-600'
+                                  : 'text-emerald-600'
+                        }`}>
+                          [{displayedStanding.toUpperCase()}]
+                        </span>
                       )}
                     </div>
                     <div className="text-[10px] text-stone-500 font-mono">
                       {currentUser.neighborhood} &middot; {currentUser.rating.toFixed(1)} ★
                     </div>
                   </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+                  <ChevronDown className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                 </button>
 
                 {showUserMenu && (
@@ -309,18 +267,6 @@ export const Header: React.FC<HeaderProps> = ({
                           )}
                         </button>
 
-                        {isAdmin && (
-                          <button
-                            onClick={() => {
-                              setShowUserMenu(false);
-                              setActiveTab('admin');
-                            }}
-                            className="w-full text-left px-4 py-2 text-xs text-amber-700 hover:bg-amber-50 font-semibold flex items-center gap-2.5 transition-colors"
-                          >
-                            <Building2 className="w-3.5 h-3.5 text-amber-600" />
-                            <span>District Admin Console</span>
-                          </button>
-                        )}
                       </div>
 
                       {/* Switch Account & Logout */}
@@ -356,11 +302,11 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={onOpenCreateListing}
-                  className="px-3 py-2 text-xs font-semibold text-white bg-stone-900 rounded-lg hover:bg-stone-800 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-xs"
+                  className="px-2 sm:px-3 py-2 text-xs font-semibold text-white bg-stone-900 rounded-lg hover:bg-stone-800 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-xs"
                   title="List your idle power tool or appliance for neighbors to rent"
                 >
                   <PlusCircle className="w-3.5 h-3.5 text-amber-400" />
-                  <span>List Tool / Item</span>
+                  <span className="hidden sm:inline">List Tool / Item</span>
                 </button>
 
                 <button
@@ -372,7 +318,8 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Broadcast</span>
                 </button>
               </div>
-            </>
+
+                    </>
           ) : (
             /* Guest / Logged Out state */
             <div className="flex items-center gap-2">
@@ -395,12 +342,22 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {showCloudModal && (
-        <CloudDatabaseSyncModal
-          onClose={() => setShowCloudModal(false)}
-          onOpenAdminDatabaseHub={onOpenDatabaseHub}
-        />
-      )}
+      <nav className="xl:hidden flex items-center gap-1 overflow-x-auto border-t border-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600">
+        {mobileTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 transition-colors ${
+              activeTab === tab.id
+                ? 'bg-stone-900 text-white font-semibold'
+                : 'hover:bg-stone-100 hover:text-stone-900'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
     </header>
   );
 };

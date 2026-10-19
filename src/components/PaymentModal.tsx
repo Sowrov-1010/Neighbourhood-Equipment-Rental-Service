@@ -101,7 +101,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
             <div>
               <div className="text-xs text-stone-400 font-medium">Agreed Direct Rental Fee</div>
               <div className="text-2xl font-bold font-mono tracking-tight text-white mt-0.5">
-                ${request.totalCost.toFixed(2)}
+                ৳{request.totalCost.toFixed(2)}
               </div>
               <div className="text-[11px] text-stone-400 font-mono mt-0.5 truncate max-w-[280px]">
                 {request.assetTitle}
@@ -189,7 +189,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
               </div>
 
               <p className="text-[11px] text-pink-900 leading-relaxed">
-                Open your <strong>bKash App</strong> or dial <strong>*247#</strong>, send <strong>${request.totalCost.toFixed(2)}</strong> to <strong>{lenderPhone}</strong>, and enter your Transaction ID below.
+                Open your <strong>bKash App</strong> or dial <strong>*247#</strong>, send <strong>৳{request.totalCost.toFixed(2)}</strong> to <strong>{lenderPhone}</strong>, and enter your Transaction ID below.
               </p>
             </div>
           )}
@@ -228,7 +228,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
               </div>
 
               <p className="text-[11px] text-orange-900 leading-relaxed">
-                Open your <strong>Nagad App</strong> or dial <strong>*167#</strong>, transfer <strong>${request.totalCost.toFixed(2)}</strong>, and paste the 8-character Nagad TrxID below.
+                Open your <strong>Nagad App</strong> or dial <strong>*167#</strong>, transfer <strong>৳{request.totalCost.toFixed(2)}</strong>, and paste the 8-character Nagad TrxID below.
               </p>
             </div>
           )}
@@ -263,7 +263,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
               </div>
 
               <p className="text-[11px] text-purple-900 leading-relaxed">
-                Dial <strong>*322#</strong> or open DBBL Rocket, transfer <strong>${request.totalCost.toFixed(2)}</strong>, and provide your Transaction ID.
+                Dial <strong>*322#</strong> or open DBBL Rocket, transfer <strong>৳{request.totalCost.toFixed(2)}</strong>, and provide your Transaction ID.
               </p>
             </div>
           )}
@@ -322,7 +322,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ request, asset, onCl
                 <span>Cash on Physical Pickup Terms</span>
               </div>
               <p className="text-stone-600 leading-relaxed">
-                Hand exact physical currency of <strong>${request.totalCost.toFixed(2)}</strong> directly to the lender upon handover inspection.
+                Hand exact physical currency of <strong>৳{request.totalCost.toFixed(2)}</strong> directly to the lender upon handover inspection.
               </p>
               <div className="text-[11px] text-stone-500">
                 Both parties confirm handover and currency exchange in person before signing the digital condition checklist.

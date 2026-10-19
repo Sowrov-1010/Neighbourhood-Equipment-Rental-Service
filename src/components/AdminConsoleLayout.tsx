@@ -11,7 +11,6 @@ import {
   Clock, 
   CheckCircle, 
   AlertTriangle, 
-  DollarSign, 
   UserX, 
   UserCheck, 
   Search, 
@@ -40,6 +39,7 @@ import {
   Mail
 } from 'lucide-react';
 import { LaravelDatabaseHubModal } from './LaravelDatabaseHubModal';
+import { CloudDatabaseSyncModal } from './CloudDatabaseSyncModal';
 
 interface AdminConsoleLayoutProps {
   onExitToResidentView: () => void;
@@ -47,6 +47,7 @@ interface AdminConsoleLayoutProps {
 
 export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitToResidentView }) => {
   const [showDatabaseHub, setShowDatabaseHub] = useState(false);
+  const [showCloudDatabaseModal, setShowCloudDatabaseModal] = useState(false);
   const { 
     currentUser, 
     users, 
@@ -58,6 +59,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
     blacklistUser, 
     restoreUserStatus, 
     resolveDispute,
+    deleteResolvedDispute,
     adminForceTransitionRequest,
     adminDeleteAsset,
     toggleAssetAvailability,
@@ -71,6 +73,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
     adminRemoveResident,
     resetResidentCredentials,
     resolveResidentSupportRequest,
+    deleteResolvedResidentSupportRequest,
     sendAdminSupportMessage
   } = useApp();
 
@@ -96,12 +99,12 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
   // Database & Spatial Module State (Admin Only)
   const [dbDialect, setDbDialect] = useState<'mysql' | 'postgres'>('mysql');
   const [dbCopied, setDbCopied] = useState(false);
-  const [spatialRadius, setSpatialRadius] = useState<number>(5.0);
+  const [spatialRadiusMeters, setSpatialRadiusMeters] = useState<number>(5000);
   const [spatialLat, setSpatialLat] = useState<number>(37.7749);
   const [spatialLng, setSpatialLng] = useState<number>(-122.4194);
 
   const calcDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // km
+    const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = 
@@ -131,34 +134,42 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
       {/* Executive Command Header */}
-      <header className="bg-stone-900 border-b border-stone-800 h-16 px-6 flex items-center justify-between shrink-0 sticky top-0 z-40">
-        <div className="flex items-center gap-3">
+      <header className="bg-stone-900 border-b border-stone-800 min-h-16 px-3 sm:px-6 py-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 sticky top-0 z-40">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold">
             <Building2 className="w-4 h-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold tracking-tight text-white">
+              <span className="text-sm font-bold tracking-tight text-white truncate">
                 District Administration Command Center
               </span>
-              <span className="text-[10px] font-mono uppercase bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 font-bold">
+              <span className="hidden md:inline text-[10px] font-mono uppercase bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 font-bold whitespace-nowrap">
                 Level 4 Oversight
               </span>
             </div>
-            <div className="text-[11px] text-stone-400 font-mono">
+            <div className="text-[11px] text-stone-400 font-mono truncate">
               Authorized Authority: {currentUser.name} ({currentUser.email})
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowCloudDatabaseModal(true)}
+            className="px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border border-emerald-500/30"
+            title="Inspect Cloud Firestore synchronization and documents"
+          >
+            <Database className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Cloud Firestore</span>
+          </button>
           <button
             onClick={() => setShowDatabaseHub(true)}
             className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border border-amber-500/30"
             title="Export SQL Database dump and inspect Laravel 11 architecture"
           >
             <Database className="w-3.5 h-3.5 text-amber-400" />
-            <span>Laravel &amp; DB Hub</span>
+            <span className="hidden sm:inline">Laravel &amp; DB Hub</span>
           </button>
 
           <button
@@ -167,7 +178,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
             title="Inspect platform from a regular community neighbor view"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            <span>Switch to Resident Site</span>
+            <span className="hidden sm:inline">Switch to Resident Site</span>
           </button>
 
           <button
@@ -175,22 +186,22 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
             className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border border-red-800"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-visible lg:overflow-hidden min-w-0">
         {/* Dedicated Admin Sidebar (260px) */}
-        <aside className="w-64 bg-stone-900/70 border-r border-stone-800 p-4 flex flex-col justify-between shrink-0">
-          <div className="space-y-1">
-            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-500 font-mono">
+        <aside className="w-full lg:w-64 bg-stone-900/70 border-b lg:border-b-0 lg:border-r border-stone-800 p-2 sm:p-4 flex flex-col justify-between shrink-0">
+          <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+            <div className="hidden lg:block px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-500 font-mono">
               CONTROL MODULES
             </div>
 
             <button
               onClick={() => setActiveModule('overview')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'overview' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -203,7 +214,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
 
             <button
               onClick={() => setActiveModule('lifecycle')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'lifecycle' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -218,7 +229,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
 
             <button
               onClick={() => setActiveModule('disputes')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'disputes' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -235,7 +246,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
 
             <button
               onClick={() => setActiveModule('users')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'users' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -250,7 +261,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
 
             <button
               onClick={() => setActiveModule('support')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'support' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -267,7 +278,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
 
             <button
               onClick={() => setActiveModule('catalog')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'catalog' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -282,7 +293,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
 
             <button
               onClick={() => setActiveModule('database')}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+              className={`w-auto lg:w-full shrink-0 whitespace-nowrap text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
                 activeModule === 'database' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-stone-300 hover:bg-stone-800'
               }`}
             >
@@ -296,7 +307,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
             </button>
           </div>
 
-          <div className="p-3 bg-stone-950/70 border border-stone-800 rounded-xl space-y-1 text-[11px] text-stone-400 font-mono">
+          <div className="hidden lg:block p-3 bg-stone-950/70 border border-stone-800 rounded-xl space-y-1 text-[11px] text-stone-400 font-mono">
             <div className="text-white font-semibold flex items-center gap-1.5">
               <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
               <span>District Audit Node</span>
@@ -307,7 +318,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
         </aside>
 
         {/* Main Admin Working Area */}
-        <main className="flex-1 p-6 overflow-y-auto max-h-[calc(100vh-64px)] space-y-6">
+        <main className="flex-1 min-w-0 p-3 sm:p-6 overflow-y-visible lg:overflow-y-auto lg:max-h-[calc(100vh-64px)] space-y-6">
           {/* Module 1: Overview */}
           {activeModule === 'overview' && (
             <div className="space-y-6">
@@ -321,7 +332,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                   </p>
                 </div>
                 <div className="text-xs font-mono text-stone-400 bg-stone-900 px-3 py-1.5 rounded-lg border border-stone-800">
-                  Total Managed Volume: ${totalVolume.toFixed(2)}
+                  Total Managed Volume: ৳{totalVolume.toFixed(2)}
                 </div>
               </div>
 
@@ -354,7 +365,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                 <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-1">
                   <div className="text-[11px] font-mono uppercase tracking-wider text-stone-400">Active Fine Ledger</div>
                   <div className="text-2xl font-bold font-mono text-amber-400 tabular-nums">
-                    ${totalFinesLevied}.00
+                    ৳{totalFinesLevied}.00
                   </div>
                   <div className="text-[11px] text-stone-400">Pending settlement with district</div>
                 </div>
@@ -399,7 +410,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                               {req.status.replace('_', ' ')}
                             </span>
                           </td>
-                          <td className="p-2.5 text-right font-bold text-white tabular-nums">${req.totalCost.toFixed(2)}</td>
+                          <td className="p-2.5 text-right font-bold text-white tabular-nums">৳{req.totalCost.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -454,7 +465,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                             State: {req.status.replace('_', ' ')}
                           </span>
                           <div className="text-[11px] text-stone-400 font-mono">
-                            Duration: {req.durationHours} hrs &middot; Total: ${req.totalCost.toFixed(2)} ({req.paymentMethodChosen})
+                            Duration: {req.durationHours} hrs &middot; Total: ৳{req.totalCost.toFixed(2)} ({req.paymentMethodChosen})
                           </div>
                         </div>
                       </div>
@@ -545,9 +556,29 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                         Complainant: <strong className="text-white">{selectedTicket.complainantName}</strong> ({selectedTicket.complainantRole}) &middot; Defendant: <strong className="text-white">{selectedTicket.defendantName}</strong>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 text-xs font-mono font-bold uppercase bg-stone-800 text-amber-400 border border-stone-700">
-                      {selectedTicket.status.replace('_', ' ')}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 text-xs font-mono font-bold uppercase bg-stone-800 text-amber-400 border border-stone-700">
+                        {selectedTicket.status.replace('_', ' ')}
+                      </span>
+                      {selectedTicket.status === 'resolved' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm(`Delete resolved case ${selectedTicket.id}? This cannot be undone.`)) return;
+                            const result = deleteResolvedDispute(selectedTicket.id);
+                            if (!result.success) {
+                              window.alert(result.error);
+                              return;
+                            }
+                            setSelectedTicketId(disputes.find(ticket => ticket.id !== selectedTicket.id)?.id || '');
+                          }}
+                          className="px-2.5 py-1.5 bg-red-900/70 hover:bg-red-800 text-red-100 rounded text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete case
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Statement */}
@@ -610,7 +641,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                           onClick={() => levyAdminFine(selectedTicket.id, selectedTicket.defendantId, fineInput)}
                           className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-xs font-bold rounded"
                         >
-                          Levy Fine (${fineInput})
+                          Levy Fine (৳{fineInput})
                         </button>
                       </div>
                     </div>
@@ -774,6 +805,22 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                         Resolve request
                       </button>
                       )}
+                      {request.status === 'resolved' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm(`Delete the resolved support request from ${user.name}? This cannot be undone.`)) return;
+                            const result = deleteResolvedResidentSupportRequest(user.id, request.id);
+                            if (!result.success) {
+                              window.alert(result.error);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-red-900/70 hover:bg-red-800 text-red-100 rounded text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete resolved request
+                        </button>
+                      )}
                     </div>
                   </section>
                 ))
@@ -901,7 +948,10 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                           ) : (
                             <select
                               value={u.standing || (u.rating < 3.0 ? 'Red Badge' : 'Active')}
-                              onChange={(e) => updateUserStanding(u.id, e.target.value as ResidentStanding)}
+                              onChange={(e) => {
+                                const result = updateUserStanding(u.id, e.target.value as ResidentStanding);
+                                if (!result.success) window.alert(result.error);
+                              }}
                               aria-label={`Update standing for ${u.name}`}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold border bg-stone-950 ${
                                 (u.standing || (u.rating < 3.0 ? 'Red Badge' : 'Active')) === 'Red Badge'
@@ -1085,7 +1135,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                       <div className="text-[10px] font-mono text-stone-400 uppercase">{ast.category} &middot; {ast.condition}</div>
                       <h4 className="text-sm font-bold text-white mt-0.5 line-clamp-1">{ast.title}</h4>
                       <div className="text-xs text-stone-400 font-mono mt-0.5">
-                        Owner: {ast.ownerName} &middot; Rate: ${ast.priceAmount} ({ast.pricingType})
+                        Owner: {ast.ownerName} &middot; Rate: ৳{ast.priceAmount} ({ast.pricingType})
                       </div>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-stone-800">
@@ -1325,17 +1375,17 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {[1, 3, 5, 10, 20].map((r) => (
+                    {[1000, 3000, 5000, 10000, 20000].map((r) => (
                       <button
                         key={r}
-                        onClick={() => setSpatialRadius(r)}
+                        onClick={() => setSpatialRadiusMeters(r)}
                         className={`px-2.5 py-1 rounded text-xs font-mono font-semibold transition-colors ${
-                          spatialRadius === r 
+                          spatialRadiusMeters === r
                             ? 'bg-amber-500 text-stone-950 font-bold' 
                             : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
                         }`}
                       >
-                        {r} km
+                        {r.toLocaleString()} m
                       </button>
                     ))}
                   </div>
@@ -1344,17 +1394,17 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                 {/* Spatial SQL Query Sample */}
                 <div className="bg-stone-950 border border-stone-800 rounded-xl p-3 font-mono text-[11px] text-amber-300/90 overflow-x-auto">
                   SELECT id, name, category, daily_rate, <br />
-                  &nbsp;&nbsp;ROUND(ST_Distance_Sphere(location_point, POINT({spatialLng}, {spatialLat})) / 1000, 2) AS distance_km <br />
+                  &nbsp;&nbsp;ROUND(ST_Distance_Sphere(location_point, POINT({spatialLng}, {spatialLat})), 0) AS distance_m <br />
                   FROM tools <br />
                   WHERE is_available = 1 <br />
-                  HAVING distance_km &lt;= {spatialRadius} <br />
-                  ORDER BY distance_km ASC;
+                  HAVING distance_m &lt;= {spatialRadiusMeters} <br />
+                  ORDER BY distance_m ASC;
                 </div>
 
                 {/* Results from live memory simulation */}
                 <div className="space-y-2">
                   <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider font-mono">
-                    Matches within {spatialRadius}km radius of [{spatialLat.toFixed(4)}, {spatialLng.toFixed(4)}]:
+                    Matches within {spatialRadiusMeters.toLocaleString()} m radius of [{spatialLat.toFixed(4)}, {spatialLng.toFixed(4)}]:
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {assets
@@ -1365,7 +1415,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                         const dist = calcDist(spatialLat, spatialLng, aLat, aLng);
                         return { ...a, dist };
                       })
-                      .filter(a => a.dist <= spatialRadius)
+                      .filter(a => a.dist <= spatialRadiusMeters)
                       .sort((a, b) => a.dist - b.dist)
                       .map(a => (
                         <div key={a.id} className="p-3 bg-stone-950 border border-stone-800 rounded-lg flex items-center justify-between">
@@ -1374,8 +1424,7 @@ export const AdminConsoleLayout: React.FC<AdminConsoleLayoutProps> = ({ onExitTo
                             <div className="text-[10px] text-stone-400 font-mono truncate">{a.neighborhood} &middot; {a.ownerName}</div>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-mono font-bold text-amber-400">{a.dist.toFixed(2)} km</span>
-                            <div className="text-[9px] text-stone-500 font-mono">{Math.round(a.dist * 1000)}m away</div>
+                            <span className="text-xs font-mono font-bold text-amber-400">{Math.round(a.dist).toLocaleString()} m</span>
                           </div>
                         </div>
                       ))}
@@ -1617,6 +1666,9 @@ CREATE INDEX idx_tools_postgis ON tools USING GIST (location_geom);
 
       {showDatabaseHub && (
         <LaravelDatabaseHubModal onClose={() => setShowDatabaseHub(false)} />
+      )}
+      {showCloudDatabaseModal && (
+        <CloudDatabaseSyncModal onClose={() => setShowCloudDatabaseModal(false)} />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Asset, PricingType, ProductReview } from '../types';
 import { useApp } from '../context/AppContext';
+import { formatDistance } from '../distance';
 import { 
   X, 
   MapPin, 
@@ -319,7 +320,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                   <div>
                     <div className="text-xs text-stone-500 font-medium">Pricing Model</div>
                     <div className="text-2xl font-bold text-stone-900 font-mono">
-                      {asset.pricingType === 'free' ? '$0.00 Free Share' : `$${asset.priceAmount} / ${asset.pricingType.replace('_', ' ')}`}
+                      {asset.pricingType === 'free' ? '৳0.00 Free Share' : `৳${asset.priceAmount} / ${asset.pricingType.replace('_', ' ')}`}
                     </div>
                     <div className="text-xs text-emerald-700 font-medium flex items-center gap-1 mt-0.5">
                       <ShieldCheck className="w-3.5 h-3.5" />
@@ -333,7 +334,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                       <span>{getObfuscatedAddress(asset.neighborhood, false)}</span>
                     </div>
                     <div className="text-stone-500 text-[11px] font-mono">
-                      Lender: <strong>{asset.ownerName}</strong> &middot; {asset.distanceKm} km from your sector
+                      Lender: <strong>{asset.ownerName}</strong> &middot; {formatDistance(asset.distanceKm)} from your sector
                     </div>
                   </div>
 
@@ -414,10 +415,10 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                 <div className="bg-white p-3 rounded-lg border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="space-y-0.5">
                     <div className="text-stone-500 font-mono">
-                      {asset.pricingType === 'hourly' && `Formula: ${calculation.hours} hours × $${asset.priceAmount}/hr`}
-                      {asset.pricingType === 'daily' && `Formula: ${calculation.days} days × $${asset.priceAmount}/day`}
-                      {asset.pricingType === 'per_use' && `Formula: Fixed Flat Fee ($${asset.priceAmount} / usage cycle)`}
-                      {asset.pricingType === 'free' && 'Formula: Neighborhood Gift ($0.00 rate)'}
+                      {asset.pricingType === 'hourly' && `Formula: ${calculation.hours} hours × ৳${asset.priceAmount}/hr`}
+                      {asset.pricingType === 'daily' && `Formula: ${calculation.days} days × ৳${asset.priceAmount}/day`}
+                      {asset.pricingType === 'per_use' && `Formula: Fixed Flat Fee (৳${asset.priceAmount} / usage cycle)`}
+                      {asset.pricingType === 'free' && 'Formula: Neighborhood Gift (৳0.00 rate)'}
                     </div>
                     <div className="text-[11px] text-stone-400">
                       Calculated Duration: {calculation.hours} hours ({calculation.days} calendar days)
@@ -427,7 +428,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                   <div className="text-right">
                     <div className="text-[11px] text-stone-500">Calculated Total Fee</div>
                     <div className="text-xl font-bold text-stone-900 font-mono tabular-nums">
-                      ${calculation.totalCost.toFixed(2)}
+                      ৳{calculation.totalCost.toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -650,7 +651,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({
                 </div>
                 <div className="p-3 rounded-xl border border-stone-200 bg-stone-50">
                   <div className="text-[10px] font-mono uppercase text-stone-500">Cumulative Revenue</div>
-                  <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5">${totalRevenue.toFixed(2)}</div>
+                  <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5">৳{totalRevenue.toFixed(2)}</div>
                 </div>
                 <div className="p-3 rounded-xl border border-stone-200 bg-stone-50">
                   <div className="text-[10px] font-mono uppercase text-stone-500">Utilization Rate</div>

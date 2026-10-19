@@ -37,7 +37,7 @@ export const LaravelDatabaseHubModal: React.FC<LaravelDatabaseHubModalProps> = (
   // Spatial Distance Playground state
   const [testUserLat, setTestUserLat] = useState(37.7749);
   const [testUserLng, setTestUserLng] = useState(-122.4194);
-  const [searchRadiusKm, setSearchRadiusKm] = useState(5.0);
+  const [searchRadiusMeters, setSearchRadiusMeters] = useState(5000);
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -377,7 +377,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
   // Calculate live distance for spatial preview
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Earth radius in km
+    const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = 
@@ -630,7 +630,7 @@ Route::middleware('auth:sanctum')->group(function () {
                   Calculates real-world geodesic great-circle distances in meters between the borrower's location and nearby equipment.
                 </p>
                 <div className="p-2.5 bg-stone-950 rounded-lg text-xs font-mono text-amber-300/90 border border-stone-800">
-                  SELECT name, ST_Distance_Sphere(location_point, POINT({testUserLng}, {testUserLat})) / 1000 AS km_away FROM tools WHERE ST_Distance_Sphere(location_point, POINT({testUserLng}, {testUserLat})) &lt;= {searchRadiusKm * 1000} ORDER BY km_away ASC;
+                  SELECT name, ST_Distance_Sphere(location_point, POINT({testUserLng}, {testUserLat})) AS distance_m FROM tools WHERE ST_Distance_Sphere(location_point, POINT({testUserLng}, {testUserLat})) &lt;= {searchRadiusMeters} ORDER BY distance_m ASC;
                 </div>
               </div>
 
@@ -657,14 +657,14 @@ Route::middleware('auth:sanctum')->group(function () {
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-stone-700 block mb-1">Radial Search ({searchRadiusKm} km)</label>
+                  <label className="font-semibold text-stone-700 block mb-1">Radial Search ({searchRadiusMeters.toLocaleString()} m)</label>
                   <input
                     type="range"
-                    min="1"
-                    max="25"
-                    step="0.5"
-                    value={searchRadiusKm}
-                    onChange={(e) => setSearchRadiusKm(parseFloat(e.target.value))}
+                    min="1000"
+                    max="25000"
+                    step="500"
+                    value={searchRadiusMeters}
+                    onChange={(e) => setSearchRadiusMeters(parseFloat(e.target.value))}
                     className="w-full mt-2 accent-amber-600"
                   />
                 </div>
@@ -687,8 +687,8 @@ Route::middleware('auth:sanctum')->group(function () {
                       const owner = users.find(u => u.id === asset.ownerId);
                       const lat = owner?.coordinates?.lat || 37.7749;
                       const lng = owner?.coordinates?.lng || -122.4194;
-                      const distKm = calculateDistance(testUserLat, testUserLng, lat, lng);
-                      const isWithin = distKm <= searchRadiusKm;
+                      const distanceMeters = calculateDistance(testUserLat, testUserLng, lat, lng);
+                      const isWithin = distanceMeters <= searchRadiusMeters;
 
                       return (
                         <tr key={asset.id} className={isWithin ? 'hover:bg-amber-50/50' : 'opacity-40 bg-stone-50'}>
@@ -696,12 +696,12 @@ Route::middleware('auth:sanctum')->group(function () {
                           <td className="px-4 py-3 text-stone-600">{asset.neighborhood}</td>
                           <td className="px-4 py-3 font-mono text-stone-500">{lat.toFixed(4)}, {lng.toFixed(4)}</td>
                           <td className="px-4 py-3 font-mono font-bold text-stone-800">
-                            {distKm.toFixed(2)} km ({(distKm * 1000).toFixed(0)} m)
+                            {Math.round(distanceMeters).toLocaleString()} m
                           </td>
                           <td className="px-4 py-3">
                             {isWithin ? (
                               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800">
-                                MATCH (WITHIN {searchRadiusKm}KM)
+                                MATCH (WITHIN {searchRadiusMeters}M)
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded text-[10px] font-mono text-stone-500 bg-stone-200">

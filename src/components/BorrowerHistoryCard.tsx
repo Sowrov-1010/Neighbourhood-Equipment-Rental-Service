@@ -62,7 +62,7 @@ export const BorrowerHistoryCard: React.FC<BorrowerHistoryCardProps> = ({
               {request.assetTitle}
             </div>
             <div className="text-xs text-stone-500 font-mono mt-0.5">
-              Duration: {request.durationHours > 0 ? `${request.durationHours} hrs` : `${request.durationDays} days`} · Rate: ${request.rate} ({request.pricingType}) · Total: ${request.totalCost.toFixed(2)}
+              Duration: {request.durationHours > 0 ? `${request.durationHours} hrs` : `${request.durationDays} days`} · Rate: ৳{request.rate} ({request.pricingType}) · Total: ৳{request.totalCost.toFixed(2)}
             </div>
           </div>
           <div className="sm:text-right">
@@ -128,7 +128,7 @@ export const BorrowerHistoryCard: React.FC<BorrowerHistoryCardProps> = ({
             <div className="bg-white p-2.5 rounded border border-stone-200">
               <div className="text-stone-500 text-[11px]">Payment Method</div>
               <div className="text-sm font-medium text-stone-900 capitalize font-mono mt-0.5">
-                {request.paymentMethodChosen === 'mobile_banking' ? 'Mobile Banking' : request.paymentMethodChosen === 'cash' ? 'Cash on Pickup' : 'Free ($0)'}
+                {request.paymentMethodChosen === 'mobile_banking' ? 'Mobile Banking' : request.paymentMethodChosen === 'cash' ? 'Cash on Pickup' : 'Free (৳0)'}
               </div>
             </div>
           </div>

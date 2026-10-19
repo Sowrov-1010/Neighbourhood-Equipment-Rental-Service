@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Asset } from '../types';
 import { MapPin, Shield, Check, Eye } from 'lucide-react';
+import { formatDistance } from '../distance';
 
 interface AssetCardProps {
   asset: Asset;
@@ -14,13 +15,13 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, onSelect }) => {
   const formatPrice = () => {
     switch (asset.pricingType) {
       case 'free':
-        return '$0.00 Free Share';
+        return '৳0.00 Free Share';
       case 'hourly':
-        return `$${asset.priceAmount} / hr`;
+        return `৳${asset.priceAmount} / hr`;
       case 'daily':
-        return `$${asset.priceAmount} / day`;
+        return `৳${asset.priceAmount} / day`;
       case 'per_use':
-        return `$${asset.priceAmount} / use`;
+        return `৳${asset.priceAmount} / use`;
     }
   };
 
@@ -46,7 +47,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, onSelect }) => {
         {/* Quiet status & zero deposit indicators */}
         <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
           <div className="bg-stone-900/85 backdrop-blur-xs text-stone-100 text-[10px] font-semibold px-2 py-0.5 rounded shadow-xs">
-            $0 Security Deposit
+            ৳0 Security Deposit
           </div>
           <div className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-xs ${
             asset.isAvailable 
@@ -85,7 +86,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, onSelect }) => {
           <div className="flex items-center justify-between text-xs text-stone-600">
             <div className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-              <span>{asset.distanceKm} km away</span>
+              <span>{formatDistance(asset.distanceKm)} away</span>
               <span aria-hidden="true">·</span>
               <span className="truncate max-w-[120px]">{asset.neighborhood}</span>
             </div>

@@ -259,7 +259,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
                 >
                   <div className="text-xs capitalize font-medium">{ptype.replace('_', ' ')}</div>
                   <div className="text-[10px] text-stone-500 font-mono mt-0.5">
-                    {ptype === 'free' ? '$0.00 Share' : ptype === 'per_use' ? 'Flat rate' : `$/${ptype}`}
+                    {ptype === 'free' ? '৳0.00 Share' : ptype === 'per_use' ? 'Flat rate' : `৳/${ptype}`}
                   </div>
                 </button>
               ))}
@@ -267,7 +267,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({ onClose 
 
             {pricingType !== 'free' && (
               <div className="flex items-center gap-2 pt-1">
-                <span className="text-xs font-medium text-stone-700">Rate Amount ($):</span>
+                <span className="text-xs font-medium text-stone-700">Rate Amount (৳):</span>
                 <input
                   type="number"
                   min="1"

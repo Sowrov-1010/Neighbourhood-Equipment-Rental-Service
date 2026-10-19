@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../context/AppContext';
 import { Asset, BroadcastRequirement } from '../types';
 import { Radio, MapPin, Calendar, Wrench, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { formatDistance } from '../distance';
 
 interface BroadcastBoardProps {
   onOpenBroadcastModal: () => void;
@@ -89,7 +90,7 @@ export const BroadcastBoard: React.FC<BroadcastBoardProps> = ({
                     </div>
                     <div className="flex sm:justify-end items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-stone-400" />
-                      <span>Max Radius: {bc.maxDistanceKm} km</span>
+                      <span>Max Radius: {formatDistance(bc.maxDistanceKm)}</span>
                     </div>
                   </div>
                 </div>
@@ -108,7 +109,7 @@ export const BroadcastBoard: React.FC<BroadcastBoardProps> = ({
 
                   {matches.length === 0 ? (
                     <div className="text-xs text-stone-500 bg-white p-3 rounded border border-stone-200 italic">
-                      No active listings found within {bc.maxDistanceKm} km for this category. Nearby lenders will be alerted.
+                      No active listings found within {formatDistance(bc.maxDistanceKm)} for this category. Nearby lenders will be alerted.
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -120,13 +121,13 @@ export const BroadcastBoard: React.FC<BroadcastBoardProps> = ({
                           <div className="truncate">
                             <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-mono font-semibold">
                               <CheckCircle2 className="w-3 h-3" />
-                              <span>Rank #{idx + 1} · {item.distanceKm} km away</span>
+                              <span>Rank #{idx + 1} · {formatDistance(item.distanceKm)} away</span>
                             </div>
                             <div className="font-bold text-stone-900 truncate mt-0.5">
                               {item.title}
                             </div>
                             <div className="text-[11px] text-stone-500">
-                              Lender: {item.ownerName} · {item.pricingType === 'free' ? 'Free' : `$${item.priceAmount}/${item.pricingType}`}
+                              Lender: {item.ownerName} · {item.pricingType === 'free' ? 'Free' : `৳${item.priceAmount}/${item.pricingType}`}
                             </div>
                           </div>
 

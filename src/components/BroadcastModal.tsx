@@ -12,7 +12,7 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ onClose }) => {
   const [requiredItem, setRequiredItem] = useState('');
   const [category, setCategory] = useState<'Power Tools' | 'Ladders & Access' | 'Household Appliances' | 'Outdoor & Garden' | 'Plumbing & Mechanical' | 'Cleaning Equipment'>('Power Tools');
   const [neededFor, setNeededFor] = useState('');
-  const [maxDistanceKm, setMaxDistanceKm] = useState(3.0);
+  const [maxDistanceMeters, setMaxDistanceMeters] = useState(3000);
   const [preferredDate, setPreferredDate] = useState(new Date().toISOString().slice(0, 10));
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -32,7 +32,7 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ onClose }) => {
       requiredItem: requiredItem.trim(),
       category,
       neededFor: neededFor.trim() || 'Neighborhood project',
-      maxDistanceKm,
+      maxDistanceKm: maxDistanceMeters / 1000,
       preferredDate,
     });
 
@@ -118,23 +118,23 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ onClose }) => {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-stone-700 uppercase tracking-wide">
-                Max Travel Radius: {maxDistanceKm} km
+                Max Travel Radius: {maxDistanceMeters} m
               </label>
               <span className="text-[11px] text-stone-500 font-mono">Radial Spatial Filter</span>
             </div>
             <input
               type="range"
-              min="0.5"
-              max="10"
-              step="0.5"
-              value={maxDistanceKm}
-              onChange={(e) => setMaxDistanceKm(parseFloat(e.target.value))}
+              min="500"
+              max="10000"
+              step="500"
+              value={maxDistanceMeters}
+              onChange={(e) => setMaxDistanceMeters(parseFloat(e.target.value))}
               className="w-full accent-stone-900 cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-stone-400 font-mono mt-0.5">
-              <span>0.5 km (Walking)</span>
-              <span>5 km (Local block)</span>
-              <span>10 km (District)</span>
+              <span>500 m (Walking)</span>
+              <span>5,000 m (Local block)</span>
+              <span>10,000 m (District)</span>
             </div>
           </div>
 

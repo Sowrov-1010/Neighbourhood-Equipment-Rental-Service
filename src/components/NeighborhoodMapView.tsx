@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Asset, PointOfInterest } from '../types';
+import { formatDistance } from '../distance';
 import { 
   MapPin, 
   Sliders, 
@@ -81,7 +82,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
   // Filter assets based on spatial radius & pricing
   const filteredAssets = assets.filter(a => {
     if (!a.isAvailable) return false;
-    if (a.distanceKm > maxDistance) return false;
+    if (a.distanceKm * 1000 > maxDistance * 1000) return false;
     if (selectedCategory !== 'all' && a.category !== selectedCategory) return false;
     if (selectedPricing !== 'all' && a.pricingType !== selectedPricing) return false;
     if (layerMode === 'pois' || layerMode === 'depot' || layerMode === 'repair' || layerMode === 'locker') return false;
@@ -90,7 +91,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
 
   // Filter POIs
   const filteredPois = pointsOfInterest.filter(p => {
-    if (p.distanceKm > maxDistance) return false;
+    if (p.distanceKm * 1000 > maxDistance * 1000) return false;
     if (layerMode === 'tools') return false;
     if (layerMode === 'depot' && p.type !== 'depot') return false;
     if (layerMode === 'repair' && p.type !== 'repair_hub') return false;
@@ -126,7 +127,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
             Neighborhood Resource &amp; POI Radial Map
           </h1>
           <p className="text-xs text-stone-600 mt-1">
-            Displays your verified location, nearby physical tools, community depots, and equipment repair stations within {maxDistance} km.
+            Displays your verified location, nearby physical tools, community depots, and equipment repair stations within {formatDistance(maxDistance)}.
           </p>
         </div>
 
@@ -214,15 +215,15 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
             <div className="flex-1">
               <div className="flex justify-between text-xs font-medium text-stone-700 mb-1">
                 <span>Radial Proximity:</span>
-                <span className="font-mono font-bold text-stone-900">{maxDistance} km</span>
+                <span className="font-mono font-bold text-stone-900">{formatDistance(maxDistance)}</span>
               </div>
               <input
                 type="range"
-                min="0.5"
-                max="8"
-                step="0.5"
-                value={maxDistance}
-                onChange={(e) => setMaxDistance(parseFloat(e.target.value))}
+                min="500"
+                max="8000"
+                step="500"
+                value={maxDistance * 1000}
+                onChange={(e) => setMaxDistance(parseFloat(e.target.value) / 1000)}
                 className="w-full accent-stone-900 cursor-pointer"
               />
             </div>
@@ -237,7 +238,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
               className="px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:ring-1 focus:ring-stone-600 focus:outline-none"
             >
               <option value="all">All Models</option>
-              <option value="free">Free ($0.00)</option>
+              <option value="free">Free (৳0.00)</option>
               <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>
               <option value="per_use">Per-Use</option>
@@ -269,7 +270,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
         <div className="lg:col-span-7 bg-white rounded-xl border border-stone-200 p-4 shadow-xs flex flex-col items-center">
           <div className="w-full flex items-center justify-between text-xs text-stone-500 mb-2 font-mono">
             <span>Center: {currentUser.neighborhood} (GPS Verified)</span>
-            <span>Radial Reach: {maxDistance} km</span>
+            <span>Radial Reach: {formatDistance(maxDistance)}</span>
           </div>
 
           <div className="relative w-full max-w-[500px] aspect-square bg-stone-900 rounded-2xl overflow-hidden p-2 flex items-center justify-center">
@@ -343,7 +344,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
                       textAnchor="middle"
                       fontWeight="bold"
                     >
-                      ★ {poi.name.split(' ')[1] || poi.name.split(' ')[0]} ({poi.distanceKm}km)
+                      ★ {poi.name.split(' ')[1] || poi.name.split(' ')[0]} ({formatDistance(poi.distanceKm)})
                     </text>
                   </g>
                 );
@@ -377,7 +378,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
                       textAnchor="middle"
                       fontWeight={isSelected ? 'bold' : 'normal'}
                     >
-                      {asset.title.split(' ')[0]} ({asset.distanceKm}km)
+                      {asset.title.split(' ')[0]} ({formatDistance(asset.distanceKm)})
                     </text>
                   </g>
                 );
@@ -420,7 +421,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
                     {activePoi.name}
                   </h4>
                   <div className="text-[11px] text-emerald-800 font-mono">
-                    {activePoi.distanceKm} km from your device &middot; {activePoi.neighborhood}
+                    {formatDistance(activePoi.distanceKm)} from your device &middot; {activePoi.neighborhood}
                   </div>
                 </div>
                 <button
@@ -486,7 +487,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
                     <div>
                       <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-mono font-bold">
                         <MapPin className="w-3 h-3" />
-                        <span>{poi.distanceKm} km away &middot; {poi.categoryLabel}</span>
+                        <span>{formatDistance(poi.distanceKm)} away &middot; {poi.categoryLabel}</span>
                       </div>
                       <h4 className="font-bold text-stone-900 mt-0.5">{poi.name}</h4>
                       <p className="text-[11px] text-stone-500 mt-0.5">{poi.address}</p>
@@ -510,7 +511,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
             <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
               {filteredAssets.length === 0 ? (
                 <div className="bg-white rounded-xl border border-stone-200 p-6 text-center text-xs text-stone-500">
-                  No tools match the selected {maxDistance} km radial distance. Expand the slider above.
+                  No tools match the selected {formatDistance(maxDistance)} radial distance. Expand the slider above.
                 </div>
               ) : (
                 filteredAssets
@@ -531,7 +532,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
                           <div>
                             <div className="flex items-center gap-1 text-[11px] text-amber-700 font-mono font-bold">
                               <MapPin className="w-3 h-3" />
-                              <span>{item.distanceKm} km away &middot; {item.neighborhood}</span>
+                              <span>{formatDistance(item.distanceKm)} away &middot; {item.neighborhood}</span>
                             </div>
                             <h4 className="font-bold text-stone-900 mt-0.5 line-clamp-1">
                               {item.title}
@@ -543,7 +544,7 @@ export const NeighborhoodMapView: React.FC<NeighborhoodMapViewProps> = ({ onSele
 
                           <div className="text-right shrink-0">
                             <div className="font-bold text-stone-900 font-mono">
-                              {item.pricingType === 'free' ? 'Free' : `$${item.priceAmount}/${item.pricingType.replace('_', ' ')}`}
+                              {item.pricingType === 'free' ? 'Free' : `৳${item.priceAmount}/${item.pricingType.replace('_', ' ')}`}
                             </div>
                             <button
                               onClick={(e) => {
