@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { NEIGHBORHOODS } from '../data/neighborhoods';
+import { PaymentReceivingMethod } from '../types';
 import { 
   X, 
   User, 
@@ -45,6 +46,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
   const [name, setName] = useState(currentUser.name);
   const [phone, setPhone] = useState(currentUser.phone || '');
   const [neighborhood, setNeighborhood] = useState(currentUser.neighborhood);
+  const [bkashNumber, setBkashNumber] = useState(
+    currentUser.lenderPaymentDetails?.paymentMethods?.find(method => method.provider === 'bKash')?.handle ||
+      (currentUser.lenderPaymentDetails?.mobileBankingProvider === 'bKash' ? currentUser.lenderPaymentDetails.mobileBankingHandle : '') || ''
+  );
+  const [nagadNumber, setNagadNumber] = useState(
+    currentUser.lenderPaymentDetails?.paymentMethods?.find(method => method.provider === 'Nagad')?.handle ||
+      (currentUser.lenderPaymentDetails?.mobileBankingProvider === 'Nagad' ? currentUser.lenderPaymentDetails.mobileBankingHandle : '') || ''
+  );
+  const [bankName, setBankName] = useState(currentUser.lenderPaymentDetails?.bankName || '');
+  const [branchName, setBranchName] = useState(currentUser.lenderPaymentDetails?.branchName || '');
+  const [accountTitle, setAccountTitle] = useState(currentUser.lenderPaymentDetails?.accountTitle || '');
+  const [accountNumber, setAccountNumber] = useState(
+    currentUser.lenderPaymentDetails?.paymentMethods?.find(method => method.provider === 'Bank Account')?.handle ||
+      currentUser.lenderPaymentDetails?.accountNumber || ''
+  );
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Security PIN states
@@ -77,10 +93,39 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const existingPaymentMethods = currentUser.lenderPaymentDetails?.paymentMethods || [];
+    const paymentMethods: PaymentReceivingMethod[] = existingPaymentMethods.filter(
+      method => !['bKash', 'Nagad', 'Bank Account'].includes(method.provider)
+    );
+    if (bkashNumber.trim()) paymentMethods.push({ provider: 'bKash', handle: bkashNumber.trim() });
+    if (nagadNumber.trim()) paymentMethods.push({ provider: 'Nagad', handle: nagadNumber.trim() });
+    if (accountNumber.trim()) paymentMethods.push({ provider: 'Bank Account', handle: accountNumber.trim() });
+
+    const mobileBankingProvider = bkashNumber.trim()
+      ? 'bKash'
+      : nagadNumber.trim()
+        ? 'Nagad'
+        : currentUser.lenderPaymentDetails?.mobileBankingProvider || '';
+    const mobileBankingHandle = mobileBankingProvider === 'bKash'
+      ? bkashNumber.trim()
+      : mobileBankingProvider === 'Nagad'
+        ? nagadNumber.trim()
+        : currentUser.lenderPaymentDetails?.mobileBankingHandle || '';
+
     updateUserProfile({
       name,
       phone,
       neighborhood,
+      lenderPaymentDetails: {
+        ...currentUser.lenderPaymentDetails,
+        paymentMethods,
+        mobileBankingProvider,
+        mobileBankingHandle,
+        bankName: bankName.trim(),
+        branchName: branchName.trim(),
+        accountTitle: accountTitle.trim(),
+        accountNumber: accountNumber.trim(),
+      },
     });
     setIsEditing(false);
     setSavedSuccess(true);
@@ -493,6 +538,68 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose, onO
                       <option key={n} value={n}>{n}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="border-t border-stone-200 pt-3 space-y-2">
+                <div className="text-xs font-bold text-stone-800">Payment Details</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-stone-600 block mb-1">bKash Number</label>
+                    <input
+                      type="tel"
+                      value={bkashNumber}
+                      onChange={(e) => setBkashNumber(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-600 block mb-1">Nagad Number</label>
+                    <input
+                      type="tel"
+                      value={nagadNumber}
+                      onChange={(e) => setNagadNumber(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-stone-600 block mb-1">Bank Name</label>
+                    <input
+                      type="text"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-600 block mb-1">Branch</label>
+                    <input
+                      type="text"
+                      value={branchName}
+                      onChange={(e) => setBranchName(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-600 block mb-1">Account Title</label>
+                    <input
+                      type="text"
+                      value={accountTitle}
+                      onChange={(e) => setAccountTitle(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-stone-600 block mb-1">Account Number</label>
+                    <input
+                      type="text"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white border border-stone-300 rounded text-xs"
+                    />
+                  </div>
                 </div>
               </div>
 
